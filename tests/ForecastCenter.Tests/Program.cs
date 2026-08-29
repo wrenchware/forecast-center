@@ -25,8 +25,8 @@ static async Task OpenMeteoParsing()
 {
     const string json = """
     {
-      "current":{"time":"2026-08-28T12:00","temperature_2m":72.5,"relative_humidity_2m":50,"apparent_temperature":73.0,"is_day":1,"weather_code":1,"surface_pressure":1015.2,"wind_speed_10m":8.0,"wind_direction_10m":180,"wind_gusts_10m":14.0},
-      "hourly":{"time":["2026-08-28T12:00","2026-08-28T13:00","2026-08-28T14:00"],"temperature_2m":[72.5,74,75],"dew_point_2m":[53,54,55],"precipitation_probability":[10,20,30],"weather_code":[1,2,2],"visibility":[16000,15000,14000],"surface_pressure":[1015,1014,1014],"uv_index":[5,6,5]},
+      "current":{"time":"2026-08-28T12:15","temperature_2m":72.5,"relative_humidity_2m":50,"apparent_temperature":73.0,"is_day":1,"weather_code":1,"surface_pressure":1015.2,"wind_speed_10m":8.0,"wind_direction_10m":180,"wind_gusts_10m":14.0},
+      "hourly":{"time":["2026-08-28T00:00","2026-08-28T12:00","2026-08-28T13:00","2026-08-28T14:00"],"temperature_2m":[60,72.5,74,75],"dew_point_2m":[20,61,54,55],"precipitation_probability":[0,10,20,30],"weather_code":[0,1,2,2],"visibility":[1000,16000,15000,14000],"surface_pressure":[1020,1015,1014,1014],"uv_index":[0,5,6,5]},
       "minutely_15":{"time":["2026-08-28T12:00","2026-08-28T12:15"],"precipitation":[0,0.1],"precipitation_probability":[10,20],"rain":[0,0.1],"snowfall":[0,0],"weather_code":[1,51]},
       "daily":{"time":["2026-08-28"],"temperature_2m_max":[78],"temperature_2m_min":[60],"weather_code":[45],"precipitation_probability_max":[30],"sunrise":["2026-08-28T06:10"],"sunset":["2026-08-28T19:28"]}
     }
@@ -35,6 +35,9 @@ static async Task OpenMeteoParsing()
     var location = new LocationResult("Test City", "CT", "United States", 41.5, -72.0);
     var result = await service.GetWeatherAsync(location, false, CancellationToken.None);
     Equal(72.5, result.Current.Temperature, "current temperature");
+    Near(53, result.Current.DewPoint, .2, "current calculated dew point");
+    Near(16, result.Current.Visibility ?? -1, .01, "nearest-hour visibility");
+    Near(5, result.Current.UvIndex ?? -1, .01, "nearest-hour UV index");
     Equal(3, result.Hourly.Count, "hour count");
     Equal(2, result.Minutely15.Count, "15-minute count");
     Equal(2, result.Daily[0].WeatherCode, "representative daytime weather code");
@@ -101,6 +104,7 @@ static WeatherSnapshot Snapshot(LocationResult location) => new(location,
 static HttpResponseMessage Json(string json) => new(HttpStatusCode.OK) { Content = new StringContent(json, Encoding.UTF8, "application/json") };
 static string TempFolder() { var path = Path.Combine(Path.GetTempPath(), "ForecastCenterTests", Guid.NewGuid().ToString("N")); Directory.CreateDirectory(path); return path; }
 static void Equal<T>(T expected, T actual, string name) { if (!EqualityComparer<T>.Default.Equals(expected, actual)) throw new InvalidOperationException($"{name}: expected {expected}, got {actual}"); }
+static void Near(double expected, double actual, double tolerance, string name) { if (Math.Abs(expected - actual) > tolerance) throw new InvalidOperationException($"{name}: expected {expected} ± {tolerance}, got {actual}"); }
 
 sealed class StaticHandler(Func<HttpRequestMessage, HttpResponseMessage> response) : HttpMessageHandler
 {

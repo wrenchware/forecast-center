@@ -25,6 +25,7 @@ Notable user-facing changes to Forecast Center are recorded here. GitHub Release
 
 ### Fixed
 
+- Current dew point is calculated from the same current temperature and humidity observation, while UV and visibility use the nearest hourly timestamp instead of falling back to midnight.
 - Opening Add location no longer crashes during first-use navigation.
 - Automatic location updates both the dashboard title and location picker.
 - Tide station selection remains visible when automatic station choice is active.

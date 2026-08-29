@@ -125,7 +125,7 @@ public sealed class OpenMeteoService(HttpClient http) : IWeatherProvider, ILocat
         var d = await http.GetFromJsonAsync<ForecastResponse>(url, ct) ?? throw new InvalidOperationException("Open-Meteo returned no weather data.");
         var nowIndex = FindNearest(d.Hourly.Time, d.Current.Time);
         var current = new CurrentWeather(d.Current.Temperature, d.Current.FeelsLike, d.Current.Humidity,
-            At(d.Hourly.DewPoint, nowIndex), d.Current.WindSpeed, d.Current.WindDirection, d.Current.WindGust,
+            CalculateDewPoint(d.Current.Temperature, d.Current.Humidity, metric), d.Current.WindSpeed, d.Current.WindDirection, d.Current.WindGust,
             At(d.Hourly.Visibility, nowIndex) / 1000, d.Current.Pressure, AtNullable(d.Hourly.UvIndex, nowIndex),
             d.Current.WeatherCode, d.Current.IsDay == 1, DateTime.Parse(d.Current.Time));
         var providerNow = DateTime.Parse(d.Current.Time);
@@ -169,7 +169,25 @@ public sealed class OpenMeteoService(HttpClient http) : IWeatherProvider, ILocat
         _ => 7
     };
 
-    private static int FindNearest(List<string> values, string value) { var at = values.FindIndex(x => x == value); return at < 0 ? 0 : at; }
+    private static int FindNearest(List<string> values, string value)
+    {
+        if (values.Count == 0) return 0;
+        var target = DateTime.Parse(value);
+        return values.Select((item, index) => (Index: index, Distance: Math.Abs((DateTime.Parse(item) - target).Ticks)))
+            .OrderBy(item => item.Distance)
+            .First().Index;
+    }
+
+    private static double CalculateDewPoint(double temperature, double relativeHumidity, bool metric)
+    {
+        var temperatureC = metric ? temperature : (temperature - 32d) * 5d / 9d;
+        var humidityRatio = Math.Clamp(relativeHumidity, 1d, 100d) / 100d;
+        const double a = 17.625;
+        const double b = 243.04;
+        var gamma = Math.Log(humidityRatio) + a * temperatureC / (b + temperatureC);
+        var dewPointC = b * gamma / (a - gamma);
+        return metric ? dewPointC : dewPointC * 9d / 5d + 32d;
+    }
     private static T At<T>(List<T> values, int i) => i >= 0 && i < values.Count ? values[i] : default!;
     private static double? AtNullable(List<double> values, int i) => i >= 0 && i < values.Count ? values[i] : null;
 
