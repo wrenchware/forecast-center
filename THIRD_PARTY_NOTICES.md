@@ -8,6 +8,15 @@ This notice was reviewed against provider documentation on August 28, 2026.
 The release payload also contains `ThirdPartyLicenses/NuGet-Package-Inventory.csv`
 and the license/notice files shipped by the exact resolved NuGet packages.
 
+## Microsoft Edge WebView2 Runtime bootstrapper
+
+The Windows installer includes Microsoft's Evergreen WebView2 bootstrapper and
+runs it only when the required Runtime is not already installed. The
+bootstrapper retrieves and installs the architecture-appropriate Evergreen
+Runtime from Microsoft. See Microsoft's
+[WebView2 distribution documentation](https://learn.microsoft.com/microsoft-edge/webview2/concepts/distribution)
+and [WebView2 download page](https://developer.microsoft.com/microsoft-edge/webview2/).
+
 ## Weather and environmental data
 
 - **Open-Meteo** supplies current conditions, forecasts, geocoding, UV, and air

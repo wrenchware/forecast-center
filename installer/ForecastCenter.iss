@@ -32,6 +32,7 @@ Name: "desktopicon"; Description: "Create a &desktop shortcut"; GroupDescription
 
 [Files]
 Source: "..\release\Forecast Center Public\*"; DestDir: "{app}"; Excludes: "ForecastCenter.Public.exe.WebView2\*,*.pdb"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "dependencies\MicrosoftEdgeWebview2Setup.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
 
 [InstallDelete]
 Type: filesandordirs; Name: "{app}\ForecastCenter.Public.exe.WebView2"
@@ -44,6 +45,7 @@ Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{a
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Tasks: desktopicon
 
 [Run]
+Filename: "{tmp}\MicrosoftEdgeWebview2Setup.exe"; Parameters: "/silent /install"; StatusMsg: "Installing Microsoft Edge WebView2 Runtime..."; Flags: waituntilterminated; Check: WebView2RuntimeNeeded
 Filename: "{app}\{#MyAppExeName}"; Description: "Launch Forecast Center"; Flags: nowait postinstall skipifsilent
 
 [Code]
@@ -67,6 +69,26 @@ begin
   InstalledExe := ExpandConstant('{localappdata}\Programs\Forecast Center Public\{#MyAppExeName}');
   if not GetVersionNumbersString(InstalledExe, Result) then
     Result := '';
+end;
+
+function HasWebView2Version(RootKey: Integer; SubKey: String): Boolean;
+var
+  Version: String;
+begin
+  Result := RegQueryStringValue(RootKey, SubKey, 'pv', Version) and
+    (Version <> '') and (Version <> '0.0.0.0');
+end;
+
+function WebView2RuntimeNeeded(): Boolean;
+var
+  ClientKey: String;
+begin
+  ClientKey := 'Software\Microsoft\EdgeUpdate\Clients\' +
+    '{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}';
+  Result := not (
+    HasWebView2Version(HKCU, ClientKey) or
+    HasWebView2Version(HKLM, 'Software\WOW6432Node\Microsoft\EdgeUpdate\Clients\' +
+      '{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'));
 end;
 
 procedure InitializeWizard();

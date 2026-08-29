@@ -16,6 +16,7 @@ Notable user-facing changes to Forecast Center are recorded here. GitHub Release
 - Adaptive first-launch window sizing for smaller desktop work areas.
 - Clean installs begin with the navigation pane collapsed, and first-run guidance no longer waits for radar or network initialization.
 - Dashboard radar reports a delayed or unavailable state instead of remaining indefinitely on its initialization screen.
+- The installer detects a missing Microsoft Edge WebView2 Runtime and invokes Microsoft's bundled Evergreen bootstrapper only when needed.
 - NOAA observed radar, matching forecast-radar colors, and a simplified Light-to-Heavy scale.
 - Provider attribution for OpenMapTiles and GeoNames, plus an exact release dependency-license bundle.
 - Bundled pinned radar browser libraries instead of downloading executable JavaScript from a CDN at runtime.

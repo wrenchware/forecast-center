@@ -68,6 +68,8 @@ The code is organized around models, view models, and replaceable provider servi
 ## Building the installer
 
 [Inno Setup 6](https://jrsoftware.org/isinfo.php) is used for the installer.
+The installer includes Microsoft's Evergreen WebView2 bootstrapper and invokes
+it only when the required runtime is missing.
 
 ```powershell
 $releasePath = Join-Path $PWD 'release\Forecast Center Public'

@@ -63,6 +63,7 @@ public sealed partial class MainWindow : Window
     private readonly AppWindow _appWindow;
     private Windows.Graphics.SizeInt32 _lastRestoredWindowSize;
     private readonly string _windowStatePath = Path.Combine(AppIdentity.DataRoot, "window-state.json");
+    private readonly string _radarStartupLogPath = Path.Combine(AppIdentity.DataRoot, "radar-startup.log");
     private Task<Microsoft.Web.WebView2.Core.CoreWebView2Environment>? _webViewEnvironmentTask;
     private ToolTip? _activeForecastToolTip;
     private bool _pointerInsideNavigationPane;
@@ -367,6 +368,7 @@ public sealed partial class MainWindow : Window
     {
         try
         {
+            LogRadarStartup("Dashboard radar initialization requested.");
             var initialization = InitializeRadarAsync(DashboardRadarWebView);
             if (await Task.WhenAny(initialization, Task.Delay(TimeSpan.FromSeconds(12))) != initialization)
             {
@@ -386,20 +388,49 @@ public sealed partial class MainWindow : Window
                     "Check the connection or open Radar to try again");
             }
         }
-        catch
+        catch (Exception ex)
         {
+            LogRadarStartup("Dashboard radar initialization failed.", ex);
+            var runtimeMissing = ex.Message.Contains("WebView2 Runtime", StringComparison.OrdinalIgnoreCase) ||
+                ex is FileNotFoundException;
             SetDashboardRadarLoadingText(
-                "Radar is temporarily unavailable",
-                "Check the connection or open Radar to try again");
+                runtimeMissing
+                    ? "WebView2 Runtime is required"
+                    : "Radar is temporarily unavailable",
+                runtimeMissing
+                    ? "Install Microsoft Edge WebView2 Runtime, then reopen Forecast Center"
+                    : "Check the connection or open Radar to try again");
         }
     }
 
     private void SetDashboardRadarLoadingText(string title, string subtitle)
     {
-        if (DashboardRadarLoading.FindName("DashboardRadarLoadingTitle") is TextBlock titleBlock)
+        if (FindDescendantByName<TextBlock>(DashboardRadarLoading, "DashboardRadarLoadingTitle") is { } titleBlock)
             titleBlock.Text = title;
-        if (DashboardRadarLoading.FindName("DashboardRadarLoadingSubtitle") is TextBlock subtitleBlock)
+        if (FindDescendantByName<TextBlock>(DashboardRadarLoading, "DashboardRadarLoadingSubtitle") is { } subtitleBlock)
             subtitleBlock.Text = subtitle;
+    }
+
+    private static T? FindDescendantByName<T>(DependencyObject root, string name) where T : FrameworkElement
+    {
+        for (var index = 0; index < VisualTreeHelper.GetChildrenCount(root); index++)
+        {
+            var child = VisualTreeHelper.GetChild(root, index);
+            if (child is T element && element.Name == name) return element;
+            if (FindDescendantByName<T>(child, name) is { } descendant) return descendant;
+        }
+        return null;
+    }
+
+    private void LogRadarStartup(string message, Exception? exception = null)
+    {
+        try
+        {
+            Directory.CreateDirectory(AppIdentity.DataRoot);
+            var detail = exception is null ? message : $"{message} {exception.GetType().Name}: {exception.Message}";
+            File.AppendAllText(_radarStartupLogPath, $"{DateTimeOffset.Now:O} {detail}{Environment.NewLine}");
+        }
+        catch { }
     }
 
     private async void Refresh_Click(object sender, RoutedEventArgs e)
@@ -1605,18 +1636,41 @@ public sealed partial class MainWindow : Window
     private async Task InitializeRadarAsync(WebView2 webView)
     {
         var folder = Path.Combine(AppContext.BaseDirectory, "Assets");
+        var target = ReferenceEquals(webView, DashboardRadarWebView) ? "dashboard" : "radar page";
+        LogRadarStartup($"Starting {target}; control loaded={webView.IsLoaded}.");
+        var runtimeVersion = Microsoft.Web.WebView2.Core.CoreWebView2Environment.GetAvailableBrowserVersionString();
+        LogRadarStartup($"WebView2 Runtime detected: {runtimeVersion}.");
+        await WaitForWebViewLoadedAsync(webView).WaitAsync(TimeSpan.FromSeconds(8));
+        LogRadarStartup($"The {target} WebView2 control is loaded.");
         _webViewEnvironmentTask ??= CreateWebViewEnvironmentAsync();
         await webView.EnsureCoreWebView2Async(await _webViewEnvironmentTask);
+        LogRadarStartup($"CoreWebView2 created for {target}.");
         webView.DefaultBackgroundColor = Windows.UI.Color.FromArgb(0, 0, 0, 0);
         webView.CoreWebView2.WebMessageReceived += RadarWebMessageReceived;
         webView.CoreWebView2.NavigationCompleted += (sender, e) =>
         {
+            LogRadarStartup($"Navigation completed for {target}; success={e.IsSuccess}; error={e.WebErrorStatus}.");
             if (ReferenceEquals(webView, DashboardRadarWebView) && e.IsSuccess)
                 HideLoadingOverlay(DashboardRadarLoading);
             if (e.IsSuccess) _ = RefreshRadarAsync();
         };
         webView.CoreWebView2.SetVirtualHostNameToFolderMapping("forecastcenter.local", folder, Microsoft.Web.WebView2.Core.CoreWebView2HostResourceAccessKind.Allow);
         webView.Source = await GetRadarSourceAsync();
+        LogRadarStartup($"Navigation requested for {target}: {webView.Source}.");
+    }
+
+    private static Task WaitForWebViewLoadedAsync(WebView2 webView)
+    {
+        if (webView.IsLoaded) return Task.CompletedTask;
+        var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        RoutedEventHandler? handler = null;
+        handler = (_, _) =>
+        {
+            webView.Loaded -= handler;
+            completion.TrySetResult();
+        };
+        webView.Loaded += handler;
+        return completion.Task;
     }
 
     private static async Task<Microsoft.Web.WebView2.Core.CoreWebView2Environment> CreateWebViewEnvironmentAsync()
