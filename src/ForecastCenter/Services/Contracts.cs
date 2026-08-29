@@ -19,7 +19,7 @@ public sealed record AppSettings
     public bool StartWithWindows { get; init; }
     public LocationResult DefaultLocation { get; init; } = new("New York", "New York", "United States", 40.7128, -74.0060);
     public List<LocationResult> SavedLocations { get; init; } = [new("New York", "New York", "United States", 40.7128, -74.0060)];
-    public bool SidebarVisible { get; init; } = true;
+    public bool SidebarVisible { get; init; }
     public bool SidebarPinned { get; init; }
     public bool NavigationTipDismissed { get; init; }
     public bool MinimizeToTray { get; init; }

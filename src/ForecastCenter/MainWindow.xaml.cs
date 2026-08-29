@@ -349,16 +349,57 @@ public sealed partial class MainWindow : Window
         // Yield after a short cap and let slow data continue populating in place.
         await Task.WhenAny(initialWeatherLoad, Task.Delay(1100));
         await RevealDashboardAsync();
+        // First-run guidance must never wait on weather providers or WebView2.
+        // In a clean/sandboxed install either may be slow or unavailable.
+        if (!ViewModel.NavigationTipDismissed)
+            DispatcherQueue.TryEnqueue(() => NavigationTeachingTip.IsOpen = true);
+        _ = InitializeDashboardRadarAsync();
         await initialWeatherLoad;
         SyncTideStationPickers();
         RefreshLocationPicker();
         UpdateDefaultLocationButton();
         DispatcherQueue.TryEnqueue(() => { UpdatePagerButtons(HourlyScroller); UpdatePagerButtons(DailyScroller); UpdateHourlyTrendRange(); });
-        await InitializeRadarAsync(DashboardRadarWebView);
         _weatherRefreshTimer.Start();
         _tideStatusTimer.Start();
-        if (!ViewModel.NavigationTipDismissed)
-            DispatcherQueue.TryEnqueue(() => NavigationTeachingTip.IsOpen = true);
+    }
+
+    private async Task InitializeDashboardRadarAsync()
+    {
+        try
+        {
+            var initialization = InitializeRadarAsync(DashboardRadarWebView);
+            if (await Task.WhenAny(initialization, Task.Delay(TimeSpan.FromSeconds(12))) != initialization)
+            {
+                SetDashboardRadarLoadingText(
+                    "Radar is taking longer than expected",
+                    "The dashboard will keep trying in the background");
+                await initialization;
+                return;
+            }
+
+            await initialization;
+            await Task.Delay(TimeSpan.FromSeconds(12));
+            if (DashboardRadarLoading.Visibility == Visibility.Visible)
+            {
+                SetDashboardRadarLoadingText(
+                    "Radar is temporarily unavailable",
+                    "Check the connection or open Radar to try again");
+            }
+        }
+        catch
+        {
+            SetDashboardRadarLoadingText(
+                "Radar is temporarily unavailable",
+                "Check the connection or open Radar to try again");
+        }
+    }
+
+    private void SetDashboardRadarLoadingText(string title, string subtitle)
+    {
+        if (DashboardRadarLoading.FindName("DashboardRadarLoadingTitle") is TextBlock titleBlock)
+            titleBlock.Text = title;
+        if (DashboardRadarLoading.FindName("DashboardRadarLoadingSubtitle") is TextBlock subtitleBlock)
+            subtitleBlock.Text = subtitle;
     }
 
     private async void Refresh_Click(object sender, RoutedEventArgs e)

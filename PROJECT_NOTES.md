@@ -22,6 +22,7 @@
 - Future radar enhancement: evaluate combining MRMS reflectivity with NOAA precipitation-classification data so snow or mixed precipitation can be identified spatially. Do not infer snow solely from reflectivity colors or a location-wide temperature flag.
 - NOAA tide stations come from the nationwide CO-OPS metadata catalog, cached locally for 30 days with bundled fallback stations. Tide overrides are per weather location by default, with an optional global override.
 - Initial dashboard loading uses a shape-matched skeleton with shimmer. It is capped at roughly 1.1 seconds so slow network providers never hold the interface behind a blocking loading state.
+- First-run guidance is scheduled immediately after the dashboard reveal and is independent of weather and WebView2 completion. Dashboard radar initializes in the background and replaces its loading message after 12 seconds if WebView2 or navigation has not completed.
 - Navigation pages use a restrained 750 ms fade/rise entrance. The sidebar intentionally retains immediate collapse behavior because forcing a custom close animation leaves WinUI in an inconsistent compact-layout state.
 
 ## Next implementation sequence
