@@ -2,6 +2,17 @@
 
 Notable user-facing changes to Forecast Center are recorded here. GitHub Releases contain matching downloadable installer notes.
 
+## 0.9.0 - 2026-08-29
+
+### Added
+
+- Automatic daily update checks and a manual check in Settings > About.
+- Update choices to open the GitHub release, receive a reminder the next day, or skip a version.
+
+### Fixed
+
+- Current dew point now uses the same timestamp as current temperature and humidity, preventing stale comfort classifications near category boundaries.
+
 ## 0.8.0 - 2026-08-28
 
 ### Added

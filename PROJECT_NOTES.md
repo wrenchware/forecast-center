@@ -12,6 +12,7 @@
 - Radar map is a local HTML asset mapped to an HTTPS virtual host in WebView2, allowing secure remote tile/API requests.
 - Successful forecasts are cached per rounded coordinate/unit system under `%LOCALAPPDATA%/Forecast Center Public/cache`; refresh failures fall back to that snapshot.
 - The executable is `ForecastCenter.Public.exe` and uses the `ForecastCenter.Public` AppUserModelID and installer update chain.
+- Update checks query stable GitHub releases at most once every 24 hours, cache the result locally, and provide manual checking under Settings > About. The app only opens the release page; it never downloads or installs an update silently.
 - The app icon is an original transparent Fluent-style cloud/sun/radar mark; `tools/IconBuilder` converts the source PNG into a multi-resolution Windows ICO.
 - Appearance supports persistent System, Light, and Dark modes. The dashboard uses a theme-aware neutral base with a restrained condition-colored atmospheric wash shared across the custom title bar and content surface.
 - The command-center cards cover near-term precipitation, six-hour temperature movement, daylight, and dew-point-based outdoor comfort.

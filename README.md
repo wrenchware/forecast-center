@@ -24,6 +24,8 @@ There are no accounts, ads, analytics, tracking SDKs, or backend services.
 
 Windows installers will be available on the [Releases](https://github.com/wrenchware/forecast-center/releases) page. Running a newer installer upgrades the existing installation and keeps your settings and saved locations.
 
+Forecast Center checks once a day for a newer stable release. Update checks can also be run manually from Settings > About; downloads open the corresponding GitHub release page.
+
 This is currently an x64, per-user installer. Windows may show a SmartScreen warning because the installer is not code-signed.
 
 ## Weather data

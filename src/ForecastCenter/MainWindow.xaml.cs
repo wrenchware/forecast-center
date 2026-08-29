@@ -68,6 +68,10 @@ public sealed partial class MainWindow : Window
     private ToolTip? _activeForecastToolTip;
     private bool _pointerInsideNavigationPane;
     private bool _updatingSidebarPin;
+    private readonly UpdateService _updateService = new();
+    private TextBlock? _updateStatusText;
+    private Button? _checkForUpdatesButton;
+    private bool _updateDialogOpen;
 
     public MainWindow()
     {
@@ -354,6 +358,7 @@ public sealed partial class MainWindow : Window
         // In a clean/sandboxed install either may be slow or unavailable.
         if (!ViewModel.NavigationTipDismissed)
             DispatcherQueue.TryEnqueue(() => NavigationTeachingTip.IsOpen = true);
+        _ = CheckForUpdatesAsync(force: false, showCurrentStatus: false);
         _ = InitializeDashboardRadarAsync();
         await initialWeatherLoad;
         SyncTideStationPickers();
@@ -1315,7 +1320,7 @@ public sealed partial class MainWindow : Window
         AboutSettingsPage.Visibility = Visibility.Collapsed;
     }
 
-    private static void AddAboutSettings(StackPanel settingsPanel)
+    private void AddAboutSettings(StackPanel settingsPanel)
     {
         var assembly = Assembly.GetExecutingAssembly();
         var version = assembly.GetName().Version;
@@ -1345,6 +1350,81 @@ public sealed partial class MainWindow : Window
             }
         };
         settingsPanel.Children.Add(card);
+
+        _updateStatusText = new TextBlock
+        {
+            Text = "Updates are checked automatically once a day.",
+            TextWrapping = TextWrapping.Wrap,
+            Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"]
+        };
+        _checkForUpdatesButton = new Button { Content = "Check for updates", HorizontalAlignment = HorizontalAlignment.Left };
+        _checkForUpdatesButton.Click += async (_, _) => await CheckForUpdatesAsync(force: true, showCurrentStatus: true);
+        var updatePanel = new StackPanel { Spacing = 9 };
+        updatePanel.Children.Add(new TextBlock { Text = "APP UPDATES", FontSize = 10, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, CharacterSpacing = 60 });
+        updatePanel.Children.Add(_updateStatusText);
+        updatePanel.Children.Add(_checkForUpdatesButton);
+        settingsPanel.Children.Add(new Border
+        {
+            Style = (Style)Application.Current.Resources["WeatherCardStyle"],
+            Padding = new Thickness(18),
+            Child = updatePanel
+        });
+    }
+
+    private async Task CheckForUpdatesAsync(bool force, bool showCurrentStatus)
+    {
+        if (_checkForUpdatesButton is not null) _checkForUpdatesButton.IsEnabled = false;
+        if (showCurrentStatus && _updateStatusText is not null) _updateStatusText.Text = "Checking for updates…";
+        try
+        {
+            var status = await _updateService.CheckAsync(force);
+            if (_updateStatusText is not null)
+                _updateStatusText.Text = status.UpdateAvailable
+                    ? $"Version {status.LatestVersion} is available."
+                    : $"Forecast Center {status.InstalledVersion} is up to date.";
+            if (status.UpdateAvailable) await ShowUpdateDialogAsync(status);
+        }
+        catch
+        {
+            if (showCurrentStatus && _updateStatusText is not null)
+                _updateStatusText.Text = "Couldn't check for updates. Try again when you're online.";
+        }
+        finally
+        {
+            if (_checkForUpdatesButton is not null) _checkForUpdatesButton.IsEnabled = true;
+        }
+    }
+
+    private async Task ShowUpdateDialogAsync(UpdateStatus status)
+    {
+        if (_updateDialogOpen || RootGrid.XamlRoot is null) return;
+        _updateDialogOpen = true;
+        try
+        {
+            var dialog = new ContentDialog
+            {
+                XamlRoot = RootGrid.XamlRoot,
+                Title = $"Forecast Center {status.LatestVersion} is available",
+                Content = new TextBlock
+                {
+                    Text = $"You currently have version {status.InstalledVersion}. Download the latest installer from GitHub.",
+                    TextWrapping = TextWrapping.Wrap,
+                    MaxWidth = 420
+                },
+                PrimaryButtonText = "View update",
+                SecondaryButtonText = "Remind me tomorrow",
+                CloseButtonText = "Skip this version",
+                DefaultButton = ContentDialogButton.Primary
+            };
+            var result = await dialog.ShowAsync();
+            if (result == ContentDialogResult.Primary && status.ReleaseUri is not null)
+                await Windows.System.Launcher.LaunchUriAsync(status.ReleaseUri);
+            else if (result == ContentDialogResult.Secondary)
+                await _updateService.RemindLaterAsync();
+            else if (status.LatestVersion is not null)
+                await _updateService.SkipVersionAsync(status.LatestVersion);
+        }
+        finally { _updateDialogOpen = false; }
     }
 
     private static FrameworkElement CreateAboutIcon()
