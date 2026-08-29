@@ -1,0 +1,54 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <RootNamespace>ForecastCenter</RootNamespace>
+    <AssemblyName>ForecastCenter.Public</AssemblyName>
+    <Product>Forecast Center (Public Preview)</Product>
+    <Version>0.8.0</Version>
+    <FileVersion>0.8.0.0</FileVersion>
+    <AssemblyVersion>0.8.0.0</AssemblyVersion>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\forecast-center.ico</ApplicationIcon>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <UseWinUI>true</UseWinUI>
+    <UseSystemDrawing>true</UseSystemDrawing>
+    <EnableMsixTooling>false</EnableMsixTooling>
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Keep prior local/test outputs out of SDK default item globs even when
+         BaseOutputPath is redirected for an isolated test build. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);bin\**;obj\**</DefaultItemExcludes>
+    <!-- MVVMTK0045 only concerns NativeAOT/WinRT projection. This desktop build is not NativeAOT. -->
+    <NoWarn>$(NoWarn);MVVMTK0045</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <AssemblyMetadata Include="ReleaseDate" Value="2026-08-28" />
+    <FrameworkReference Include="Microsoft.WindowsDesktop.App.WindowsForms" />
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.260710003" />
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.4948" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3485.44" />
+    <PackageReference Include="GribSharp" Version="1.0.16" />
+    <!-- CSJ2K pulls NETStandard.Library 1.6.1. Pin the patched servicing
+         releases so NuGet does not resolve its vulnerable 4.3.0 assets. -->
+    <PackageReference Include="System.Net.Http" Version="4.3.4" />
+    <PackageReference Include="System.Text.RegularExpressions" Version="4.3.1" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="Assets\radar.html" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\forecast-center.ico" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\forecast-center-icon.png" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\cities15000.zip" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\metrics\*.svg" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\vendor\*" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\LICENSE" Link="LICENSE" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\PRIVACY.md" Link="PRIVACY.md" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\THIRD_PARTY_NOTICES.md" Link="THIRD_PARTY_NOTICES.md" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

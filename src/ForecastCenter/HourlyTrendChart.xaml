@@ -1,0 +1,31 @@
+<UserControl
+    x:Class="ForecastCenter.HourlyTrendChart"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Default">
+                    <SolidColorBrush x:Key="ChartToolTipBackground" Color="#F6FAFCFE"/>
+                    <SolidColorBrush x:Key="ChartToolTipBorder" Color="#3719232D"/>
+                    <SolidColorBrush x:Key="ChartToolTipForeground" Color="#FF181B1F"/>
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="ChartToolTipBackground" Color="#EE1F2328"/>
+                    <SolidColorBrush x:Key="ChartToolTipBorder" Color="#5AFFFFFF"/>
+                    <SolidColorBrush x:Key="ChartToolTipForeground" Color="White"/>
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <Grid x:Name="ChartRoot" MinHeight="64" Background="Transparent"
+          PointerMoved="ChartCanvas_PointerMoved" PointerExited="ChartCanvas_PointerExited">
+        <Canvas x:Name="ChartCanvas" MinHeight="64" IsHitTestVisible="False" SizeChanged="ChartCanvas_SizeChanged"/>
+        <Popup x:Name="HoverPopup" IsLightDismissEnabled="False">
+            <Border x:Name="HoverTip" IsHitTestVisible="False" Padding="12" CornerRadius="12"
+                    Background="{ThemeResource ChartToolTipBackground}" BorderBrush="{ThemeResource ChartToolTipBorder}" BorderThickness="1">
+                <TextBlock x:Name="HoverTipText" Foreground="{ThemeResource ChartToolTipForeground}" FontSize="12" LineHeight="18"/>
+            </Border>
+        </Popup>
+    </Grid>
+</UserControl>

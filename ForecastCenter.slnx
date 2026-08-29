@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="src/ForecastCenter/ForecastCenter.csproj" />
+  <Project Path="tests/ForecastCenter.Tests/ForecastCenter.Tests.csproj" />
+</Solution>

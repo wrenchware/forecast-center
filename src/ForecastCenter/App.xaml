@@ -1,0 +1,40 @@
+<Application
+    x:Class="ForecastCenter.App"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Default">
+                    <Color x:Key="DashboardBaseColor">#F4F6F8</Color>
+                    <Color x:Key="HeroCardStrokeColor">#527A94</Color>
+                    <Color x:Key="HeroToneOverlayColor">#00000000</Color>
+                    <Color x:Key="TideCardBackgroundColor">#EAF5F8</Color>
+                    <Color x:Key="TideAccentColor">#147F9B</Color>
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Dark">
+                    <Color x:Key="DashboardBaseColor">#111418</Color>
+                    <Color x:Key="HeroCardStrokeColor">#31566E</Color>
+                    <Color x:Key="HeroToneOverlayColor">#24000000</Color>
+                    <Color x:Key="TideCardBackgroundColor">#172229</Color>
+                    <Color x:Key="TideAccentColor">#62D7F2</Color>
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+            <ResourceDictionary.MergedDictionaries>
+                <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
+            </ResourceDictionary.MergedDictionaries>
+            <SolidColorBrush x:Key="CardBackgroundBrush" Color="{ThemeResource CardBackgroundFillColorDefault}" />
+            <SolidColorBrush x:Key="HeroCardStrokeBrush" Color="{ThemeResource HeroCardStrokeColor}" />
+            <SolidColorBrush x:Key="HeroToneOverlayBrush" Color="{ThemeResource HeroToneOverlayColor}" />
+            <SolidColorBrush x:Key="TideCardBackgroundBrush" Color="{ThemeResource TideCardBackgroundColor}" />
+            <SolidColorBrush x:Key="TideAccentBrush" Color="{ThemeResource TideAccentColor}" />
+            <Style x:Key="WeatherCardStyle" TargetType="Border">
+                <Setter Property="Background" Value="{ThemeResource CardBackgroundBrush}" />
+                <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="12" />
+                <Setter Property="Padding" Value="20" />
+            </Style>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

@@ -1,0 +1,11 @@
+<UserControl
+    x:Class="ForecastCenter.RiskScale"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid x:Name="ScaleRoot" Height="12" SizeChanged="ScaleRoot_SizeChanged">
+        <Border x:Name="ScaleTrack" Height="6" CornerRadius="3" VerticalAlignment="Bottom" Opacity="0.92"/>
+        <Canvas Height="12" VerticalAlignment="Stretch" IsHitTestVisible="False">
+            <Polygon x:Name="ScaleMarker" Width="8" Height="6" Points="0,0 8,0 4,6" Stretch="Fill" Fill="White" Stroke="#99151A20" StrokeThickness="1"/>
+        </Canvas>
+    </Grid>
+</UserControl>

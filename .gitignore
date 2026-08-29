@@ -1,0 +1,17 @@
+# .NET / WinUI build output
+bin/
+obj/
+**/bin/
+**/obj/
+.vs/
+/release/
+
+# Local runtime and IDE state
+*.user
+*.suo
+*.log
+
+# Design-review screenshots kept outside source control
+/Screenshot*.png
+/good.png
+/current native.png
