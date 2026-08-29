@@ -1,0 +1,17 @@
+Windows Sandbox does not include WinGet. Open Windows PowerShell as
+administrator inside Sandbox and first run:
+
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\ForecastCenterWingetManifest\INSTALL-WINGET.ps1
+
+When it finishes, close that Terminal window and open Terminal as administrator
+again. Then run:
+
+winget settings --enable LocalManifestFiles
+winget validate --manifest C:\ForecastCenterWingetManifest\manifest
+winget install --manifest C:\ForecastCenterWingetManifest\manifest --silent --accept-package-agreements --accept-source-agreements
+
+After installation, verify detection with:
+
+winget list --id Wrenchware.ForecastCenter --exact
+
+Launch Forecast Center from Start and confirm the dashboard and radar load.

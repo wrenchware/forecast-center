@@ -26,6 +26,8 @@ Windows installers will be available on the [Releases](https://github.com/wrench
 
 Forecast Center checks once a day for a newer stable release. Update checks can also be run manually from Settings > About; downloads open the corresponding GitHub release page.
 
+A WinGet community manifest is maintained under `winget/`. Until it is accepted into the community repository, it can be validated and installed as a local manifest. Version 0.9.0 is unsigned, so Windows SmartScreen may request confirmation even during a silent WinGet installation.
+
 This is currently an x64, per-user installer. Windows may show a SmartScreen warning because the installer is not code-signed.
 
 ## Weather data
