@@ -7,12 +7,11 @@
 - Installer payloads must come from `dotnet build -p:SelfContained=true -p:OutDir=...`, not a plain `dotnet publish -o` folder. In this CLI/unpackaged WinUI configuration, `publish` omitted generated `.xbf`/`.pri` resources; a non-self-contained `build` omitted the .NET runtime. Validate both `App.xbf` and `coreclr.dll` before compiling the installer.
 - Target framework: `net8.0-windows10.0.19041.0`; Windows App SDK stable 1.8.10 (`1.8.260710003`).
 - Providers: Open-Meteo for forecast/geocoding and 15-minute precipitation, NWS for U.S. alerts/narratives, NOAA/NWS MRMS ImageServer/WMS for current radar, NOAA HRRR/NOMADS for six-hour future radar, NOAA NDFD WMS as the future-radar fallback, and a bundled GeoNames cities15000 index for nearby radar labels. Network providers are kept out of the UI layer.
-- The public edition contains no local-station scraping, extracted media playback, or video-provider preferences. A future briefing feature must use data and assets licensed for public redistribution.
 - Default location is New York; manual search does not require location permission.
-- Public settings live under `%LOCALAPPDATA%/Forecast Center Public/settings.json` and are intentionally isolated from private editions.
+- Settings live under `%LOCALAPPDATA%/Forecast Center Public/settings.json`.
 - Radar map is a local HTML asset mapped to an HTTPS virtual host in WebView2, allowing secure remote tile/API requests.
 - Successful forecasts are cached per rounded coordinate/unit system under `%LOCALAPPDATA%/Forecast Center Public/cache`; refresh failures fall back to that snapshot.
-- The public executable is `ForecastCenter.Public.exe`, uses the `ForecastCenter.Public` AppUserModelID, and has its own installer AppId/update chain. It does not read private or legacy WeatherDesk data.
+- The executable is `ForecastCenter.Public.exe` and uses the `ForecastCenter.Public` AppUserModelID and installer update chain.
 - The app icon is an original transparent Fluent-style cloud/sun/radar mark; `tools/IconBuilder` converts the source PNG into a multi-resolution Windows ICO.
 - Appearance supports persistent System, Light, and Dark modes. The dashboard uses a theme-aware neutral base with a restrained condition-colored atmospheric wash shared across the custom title bar and content surface.
 - The command-center cards cover near-term precipitation, six-hour temperature movement, daylight, and dew-point-based outdoor comfort.
@@ -27,8 +26,8 @@
 
 ## Next implementation sequence
 
-1. Complete a clean-machine install, upgrade, launch, and uninstall test for the public installer.
-2. Choose the final public repository URL and use it in the NWS contact-style User-Agent.
+1. Complete a clean-machine install, upgrade, launch, and uninstall test.
+2. Keep the repository URL current in the NWS contact-style User-Agent.
 3. Decide whether to code-sign the first broadly distributed installer.
 4. Add optional MSIX/winget packaging after the Inno Setup release is proven stable.
 
@@ -39,7 +38,7 @@
 - Do not poll NWS alerts more frequently than 30 seconds.
 - Preserve visible NOAA/NWS, Open-Meteo, OpenStreetMap, OpenFreeMap, and GeoNames attribution.
 - Local 0.7.0-to-0.8.0 installer lifecycle testing passed on 2026-08-28,
-  including launch, WebView2 data isolation, settings preservation, private-app
-  coexistence, uninstall registry cleanup, and zero installed files remaining.
+  including launch, WebView2 data isolation, settings preservation,
+  uninstall registry cleanup, and zero installed files remaining.
   A Windows Sandbox clean-machine attempt was blocked by a host Remote Desktop
   session error and must be repeated on another Windows 11 environment.

@@ -960,7 +960,7 @@ public sealed partial class MainWindow : Window
 
     private void UpdateBottomFeatureAspectRatio(double contentWidth)
     {
-        // Keep the public edition's full-width tide summary intentionally compact.
+        // Keep the full-width tide summary intentionally compact.
         var tideHeight = contentWidth < 700 ? 220d : 190d;
         if (Math.Abs(DashboardDetailsCard.Height - tideHeight) > 0.5)
             DashboardDetailsCard.Height = tideHeight;

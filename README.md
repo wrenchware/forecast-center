@@ -3,9 +3,6 @@
 Forecast Center is an open-source, ad-free Windows weather dashboard built
 with C#, .NET, WinUI 3, and the Windows App SDK.
 
-> The public edition is being prepared for its first release. It contains no
-> station-video scraping or private media integrations.
-
 Forecast Center is a weather app for Windows 11. I built it because I wanted a clean desktop forecast with a useful radar and none of the news, ads, accounts, or subscription prompts found in many weather apps.
 
 It is written in C# with WinUI 3. The radar uses Leaflet inside WebView2.
@@ -84,7 +81,6 @@ Use the self-contained `dotnet build` layout shown above. A plain `dotnet publis
 ## Current limitations
 
 - Radar and live weather providers need an internet connection.
-- The public edition intentionally excludes station video and page-scraping integrations.
 - The current installer is not code-signed and there is no MSIX package yet.
 
 See [CHANGELOG.md](CHANGELOG.md) for release history and [PROJECT_NOTES.md](PROJECT_NOTES.md) for implementation notes.

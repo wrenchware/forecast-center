@@ -5,7 +5,7 @@ namespace ForecastCenter;
 internal static class AppIdentity
 {
     public const string ProductName = "Forecast Center";
-    public const string DistributionName = "Forecast Center (Public Preview)";
+    public const string DistributionName = "Forecast Center";
     public const string AppUserModelId = "ForecastCenter.Public";
     public const string StartupValueName = "ForecastCenterPublic";
     public const string DataFolderName = "Forecast Center Public";

@@ -1,4 +1,4 @@
-#define MyAppName "Forecast Center (Public Preview)"
+#define MyAppName "Forecast Center"
 #define MyAppVersion "0.8.0"
 #define MyAppPublisher "Forecast Center contributors"
 #define MyAppExeName "ForecastCenter.Public.exe"
@@ -9,11 +9,11 @@ AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 DefaultDirName={localappdata}\Programs\Forecast Center Public
-DefaultGroupName=Forecast Center (Public Preview)
+DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
 OutputDir=..\release\installer
-OutputBaseFilename=ForecastCenter-Public-Setup-{#MyAppVersion}-x64
+OutputBaseFilename=ForecastCenter-Setup-{#MyAppVersion}-x64
 SetupIconFile=..\src\ForecastCenter\Assets\forecast-center.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
 Compression=lzma2/ultra64
@@ -40,8 +40,8 @@ Type: filesandordirs; Name: "{app}\ForecastCenter.Public.exe.WebView2"
 Type: filesandordirs; Name: "{app}\ForecastCenter.Public.exe.WebView2"
 
 [Icons]
-Name: "{group}\Forecast Center (Public Preview)"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"
-Name: "{autodesktop}\Forecast Center (Public Preview)"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "Launch Forecast Center"; Flags: nowait postinstall skipifsilent
