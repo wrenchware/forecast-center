@@ -101,4 +101,4 @@ Use the self-contained `dotnet build` layout shown above. A plain `dotnet publis
 - Radar and live weather providers need an internet connection.
 - The current installer is not code-signed and there is no MSIX package yet.
 
-See [CHANGELOG.md](CHANGELOG.md) for release history and [PROJECT_NOTES.md](PROJECT_NOTES.md) for implementation notes.
+See [CHANGELOG.md](CHANGELOG.md) for release history.
