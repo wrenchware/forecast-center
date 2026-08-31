@@ -20,13 +20,25 @@ It is written in C# with WinUI 3. The radar uses Leaflet inside WebView2.
 
 There are no accounts, ads, analytics, tracking SDKs, or backend services.
 
-## Download
+## Install
 
-Windows installers will be available on the [Releases](https://github.com/wrenchware/forecast-center/releases) page. Running a newer installer upgrades the existing installation and keeps your settings and saved locations.
+The easiest installation method is WinGet:
+
+```powershell
+winget install --id Wrenchware.ForecastCenter --exact
+```
+
+To upgrade later:
+
+```powershell
+winget upgrade --id Wrenchware.ForecastCenter --exact
+```
+
+The same installer can be downloaded manually from [GitHub Releases](https://github.com/wrenchware/forecast-center/releases). Installing a newer version preserves settings and saved locations.
 
 Forecast Center checks once a day for a newer stable release. Update checks can also be run manually from Settings > About; downloads open the corresponding GitHub release page.
 
-A WinGet community manifest is maintained under `winget/`. Until it is accepted into the community repository, it can be validated and installed as a local manifest. Version 0.9.0 is unsigned, so Windows SmartScreen may request confirmation even during a silent WinGet installation.
+A copy of the accepted WinGet community manifest is maintained under `winget/`. Version 0.9.0 is unsigned, so Windows SmartScreen may still request confirmation during installation.
 
 This is currently an x64, per-user installer. Windows may show a SmartScreen warning because the installer is not code-signed.
 
