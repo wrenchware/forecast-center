@@ -4,6 +4,8 @@ Forecast Center is an open-source, ad-free weather app for Windows 11. It offers
 
 It is written in C# with WinUI 3. The radar uses Leaflet inside WebView2.
 
+[![Forecast Center dashboard in dark mode](docs/screenshots/dashboard-dark.png)](docs/screenshots/dashboard-dark.png)
+
 ## Features
 
 - Current conditions, hourly forecast, and 10-day forecast
@@ -16,6 +18,16 @@ It is written in C# with WinUI 3. The radar uses Leaflet inside WebView2.
 - Local settings and last-known weather cache
 
 There are no accounts, ads, analytics, tracking SDKs, or backend services.
+
+## Screenshots
+
+### Animated weather radar
+
+[![Expanded weather radar](docs/screenshots/radar-expanded-dark.png)](docs/screenshots/radar-expanded-dark.png)
+
+| Forecast details | Light theme |
+| --- | --- |
+| [![Hourly and 10-day forecasts, tides, and moon phases](docs/screenshots/forecast-details-dark.png)](docs/screenshots/forecast-details-dark.png) | [![Forecast Center dashboard in light mode](docs/screenshots/dashboard-light.png)](docs/screenshots/dashboard-light.png) |
 
 ## Install
 
