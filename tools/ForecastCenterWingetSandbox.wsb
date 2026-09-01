@@ -2,7 +2,7 @@
   <Networking>Enable</Networking>
   <MappedFolders>
     <MappedFolder>
-      <HostFolder>D:\Weather App\public-edition\winget\Wrenchware.ForecastCenter\0.9.0</HostFolder>
+      <HostFolder>D:\Weather App\public-edition\winget\Wrenchware.ForecastCenter\1.0.1</HostFolder>
       <SandboxFolder>C:\ForecastCenterWingetManifest</SandboxFolder>
       <ReadOnly>true</ReadOnly>
     </MappedFolder>

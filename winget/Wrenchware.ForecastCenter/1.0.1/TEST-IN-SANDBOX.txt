@@ -1,0 +1,13 @@
+Forecast Center 1.0.1 local WinGet smoke test
+
+1. Copy this folder to C:\ForecastCenterWingetManifest in Windows Sandbox.
+2. Open PowerShell.
+3. Run:
+
+winget settings --enable LocalManifestFiles
+winget validate --manifest C:\ForecastCenterWingetManifest\manifest
+winget install --manifest C:\ForecastCenterWingetManifest\manifest --silent --accept-package-agreements --accept-source-agreements
+
+4. Confirm:
+
+winget list --id Wrenchware.ForecastCenter --exact

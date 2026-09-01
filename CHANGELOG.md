@@ -2,7 +2,7 @@
 
 Notable user-facing changes to Forecast Center are recorded here. GitHub Releases contain matching downloadable installer notes.
 
-## 1.0.1 - Unreleased
+## 1.0.1 - 2026-09-01
 
 ### Added
 
