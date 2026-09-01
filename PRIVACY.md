@@ -29,9 +29,8 @@ without it.
 ## Local data
 
 Settings, saved locations, window state, recent successful weather responses,
-radar metadata, tide-station data, and diagnostic status files are stored under:
-
-`%LOCALAPPDATA%\Forecast Center Public`
+radar metadata, tide-station data, and diagnostic status files are stored in
+Forecast Center's folder under `%LOCALAPPDATA%`.
 
 This data stays on the PC unless it is included in a backup or deliberately
 shared by the user. Uninstalling the app may leave this folder in place so an

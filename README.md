@@ -1,9 +1,6 @@
 # Forecast Center
 
-Forecast Center is an open-source, ad-free Windows weather dashboard built
-with C#, .NET, WinUI 3, and the Windows App SDK.
-
-Forecast Center is a weather app for Windows 11. I built it because I wanted a clean desktop forecast with a useful radar and none of the news, ads, accounts, or subscription prompts found in many weather apps.
+Forecast Center is an open-source, ad-free weather app for Windows 11. It offers a clean desktop forecast and useful radar without news, accounts, or subscription prompts.
 
 It is written in C# with WinUI 3. The radar uses Leaflet inside WebView2.
 
@@ -88,7 +85,7 @@ The installer includes Microsoft's Evergreen WebView2 bootstrapper and invokes
 it only when the required runtime is missing.
 
 ```powershell
-$releasePath = Join-Path $PWD 'release\Forecast Center Public'
+$releasePath = Join-Path $PWD 'release\Forecast Center'
 dotnet build .\src\ForecastCenter\ForecastCenter.csproj -c Release -p:Platform=x64 -p:SelfContained=true "-p:OutDir=$releasePath"
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\CollectThirdPartyLicenses.ps1 -AssetsFile .\src\ForecastCenter\obj\project.assets.json -OutputDirectory "$releasePath\ThirdPartyLicenses"
 & "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe" .\installer\ForecastCenter.iss

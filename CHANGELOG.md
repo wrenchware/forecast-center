@@ -12,7 +12,7 @@ Notable user-facing changes to Forecast Center are recorded here. GitHub Release
 
 - Keep longer hero forecasts compact at three lines and show the complete narrative in the app's standard forecast tooltip only when the text is truncated.
 - Use a consistent home-icon Dashboard action across Settings, Radar, and Alerts pages.
-- Corrected the public-edition description on the About page.
+- Refined the description on the About page.
 - Keep animated hourly and 10-day pages full-width with aligned, rounded pager controls and matching hourly hover feedback.
 - Use a cleaner borderless treatment for detailed forecast and trend tooltips.
 
@@ -83,7 +83,6 @@ Notable user-facing changes to Forecast Center are recorded here. GitHub Release
 
 ### Added
 
-- Initial Settings structure for a future nationwide Forecast Briefing provider.
 - A categorized Settings experience for General, Locations, Sources & data, and About.
 - An in-app About card showing the installed version and release date.
 
@@ -135,7 +134,7 @@ Notable user-facing changes to Forecast Center are recorded here. GitHub Release
 ### Improved
 
 - Refined Fluent navigation sizing, icons, selection treatment, and Settings separation.
-- Improved media-card layout and controls in preparation for a generated briefing.
+- Improved environmental-card layout and controls.
 - Polished environmental scale indicators, forecast tooltips, and alert/status corner treatment.
 - Improved tide-station labeling when Automatic selection is active.
 
