@@ -84,7 +84,6 @@ public sealed partial class MainWindow : Window
                 DispatcherQueue.TryEnqueue(() => UpdateForecastLayout(DashboardGrid.ActualWidth));
         };
         NormalizeCommandCardTints();
-        SetRadarAttributionOpacity(0);
         StartLoadingShimmer(RadarLoadingShimmer);
         StartLoadingShimmer(DashboardSkeletonShimmer);
         ElementCompositionPreview.GetElementVisual(WeatherPage).Opacity = 0;
@@ -116,8 +115,8 @@ public sealed partial class MainWindow : Window
         _sidebarAutoHideTimer.Interval = TimeSpan.FromSeconds(2);
         _sidebarAutoHideTimer.IsRepeating = false;
         _sidebarAutoHideTimer.Tick += SidebarAutoHideTimer_Tick;
-        Nav.IsPaneVisible = ViewModel.SidebarVisible;
-        Nav.IsPaneOpen = ViewModel.SidebarVisible;
+        Nav.IsPaneVisible = false;
+        Nav.IsPaneOpen = false;
         UpdateNavigationContentCorner();
         UpdateSidebarToggleIcon();
         Title = "Forecast Center";
@@ -356,10 +355,6 @@ public sealed partial class MainWindow : Window
         // Yield after a short cap and let slow data continue populating in place.
         await Task.WhenAny(initialWeatherLoad, Task.Delay(1100));
         await RevealDashboardAsync();
-        // First-run guidance must never wait on weather providers or WebView2.
-        // In a clean/sandboxed install either may be slow or unavailable.
-        if (!ViewModel.NavigationTipDismissed)
-            DispatcherQueue.TryEnqueue(() => NavigationTeachingTip.IsOpen = true);
         _ = CheckForUpdatesAsync(force: false, showCurrentStatus: false);
         _ = InitializeDashboardRadarAsync();
         await initialWeatherLoad;
@@ -447,15 +442,6 @@ public sealed partial class MainWindow : Window
 
     private void CurrentWeatherCard_PointerEntered(object sender, PointerRoutedEventArgs e) => HeroRefreshButton.Opacity = 1;
     private void CurrentWeatherCard_PointerExited(object sender, PointerRoutedEventArgs e) => HeroRefreshButton.Opacity = 0;
-    private void SetRadarAttributionOpacity(double opacity)
-    {
-        if (DashboardRadarCard.Child is Grid radarContents && radarContents.Children.LastOrDefault() is Border attribution)
-        {
-            attribution.Opacity = opacity;
-            attribution.IsHitTestVisible = false;
-        }
-    }
-
     private void NormalizeCommandCardTints()
     {
         NearTermCard.Background = new SolidColorBrush(ColorHelper.FromArgb(14, 42, 142, 219));
@@ -619,9 +605,47 @@ public sealed partial class MainWindow : Window
     }
 
     private sealed record RadarTemperatureCache(DateTimeOffset SavedAt, List<NearbyTemperature> Cities);
-    private void OpenRadar_Click(object sender, RoutedEventArgs e) => Nav.SelectedItem = RadarNavItem;
-    private void OpenAlerts_Click(object sender, RoutedEventArgs e) => Nav.SelectedItem = AlertsNavItem;
-    private void BackToWeather_Click(object sender, RoutedEventArgs e) => Nav.SelectedItem = Nav.MenuItems.OfType<NavigationViewItem>().First(item => (item.Tag as string) == "weather");
+    private async void OpenRadar_Click(object sender, RoutedEventArgs e)
+    {
+        WeatherPage.Visibility = AlertsPage.Visibility = SettingsPage.Visibility = Visibility.Collapsed;
+        RadarPage.Visibility = Visibility.Visible;
+        AnimatePageEntrance(RadarPage);
+        if (!_radarReady)
+        {
+            _radarReady = true;
+            await InitializeRadarAsync(RadarWebView);
+        }
+    }
+    private void OpenAlerts_Click(object sender, RoutedEventArgs e) => ShowAlertsPage();
+    private void OpenAlerts_Tapped(object sender, TappedRoutedEventArgs e)
+    {
+        e.Handled = true;
+        ShowAlertsPage();
+    }
+    private void ShowAlertsPage()
+    {
+        WeatherPage.Visibility = RadarPage.Visibility = SettingsPage.Visibility = Visibility.Collapsed;
+        AlertsPage.Visibility = Visibility.Visible;
+        AnimatePageEntrance(AlertsPage);
+    }
+    private void OpenSettings_Click(object sender, RoutedEventArgs e)
+        => ShowSettingsPage("general");
+    private void ShowSettingsPage(string section)
+    {
+        WeatherPage.Visibility = RadarPage.Visibility = AlertsPage.Visibility = Visibility.Collapsed;
+        SettingsPage.Visibility = Visibility.Visible;
+        var item = SettingsNav.MenuItems.OfType<NavigationViewItem>()
+            .FirstOrDefault(candidate => string.Equals(candidate.Tag as string, section, StringComparison.Ordinal));
+        if (item is not null) SettingsNav.SelectedItem = item;
+        AnimatePageEntrance(SettingsPage);
+    }
+    private void BackToWeather_Click(object sender, RoutedEventArgs e)
+    {
+        RadarPage.Visibility = AlertsPage.Visibility = SettingsPage.Visibility = Visibility.Collapsed;
+        RefreshLocationPicker();
+        WeatherPage.Visibility = Visibility.Visible;
+        AnimatePageEntrance(WeatherPage);
+    }
     private void SettingsDashboard_Click(object sender, RoutedEventArgs e)
     {
         ResetSettingsToGeneral();
@@ -911,10 +935,7 @@ public sealed partial class MainWindow : Window
 
     private void OpenAddLocationSettings()
     {
-        Nav.SelectedItem = Nav.SettingsItem;
-        var locationsItem = SettingsNav.MenuItems.OfType<NavigationViewItem>()
-            .First(item => string.Equals(item.Tag as string, "locations", StringComparison.Ordinal));
-        SettingsNav.SelectedItem = locationsItem;
+        ShowSettingsPage("locations");
         FocusLocationSearchWhenLoaded();
     }
 
@@ -980,9 +1001,8 @@ public sealed partial class MainWindow : Window
 
     private async Task ReloadRadarLocationsAsync()
     {
-        var source = await GetRadarSourceAsync();
-        if (DashboardRadarWebView.CoreWebView2 is not null) DashboardRadarWebView.Source = source;
-        if (_radarReady && RadarWebView.CoreWebView2 is not null) RadarWebView.Source = source;
+        if (DashboardRadarWebView.CoreWebView2 is not null) DashboardRadarWebView.Source = await GetRadarSourceAsync(true);
+        if (_radarReady && RadarWebView.CoreWebView2 is not null) RadarWebView.Source = await GetRadarSourceAsync(false);
     }
     private void ForecastScroll_Click(object sender, RoutedEventArgs e)
     {
@@ -1526,7 +1546,7 @@ public sealed partial class MainWindow : Window
 
     private void OpenDownloadedDataSettings_Click(object sender, RoutedEventArgs e)
     {
-        Nav.SelectedItem = Nav.SettingsItem;
+        ShowSettingsPage("sources");
         DispatcherQueue.TryEnqueue(() => _downloadedDataSettingsSection?.StartBringIntoView());
     }
 
@@ -1749,7 +1769,7 @@ public sealed partial class MainWindow : Window
             if (e.IsSuccess) _ = RefreshRadarAsync();
         };
         webView.CoreWebView2.SetVirtualHostNameToFolderMapping("forecastcenter.local", folder, Microsoft.Web.WebView2.Core.CoreWebView2HostResourceAccessKind.Allow);
-        webView.Source = await GetRadarSourceAsync();
+        webView.Source = await GetRadarSourceAsync(ReferenceEquals(webView, DashboardRadarWebView));
         LogRadarStartup($"Navigation requested for {target}: {webView.Source}.");
     }
 
@@ -1775,20 +1795,31 @@ public sealed partial class MainWindow : Window
             new Microsoft.Web.WebView2.Core.CoreWebView2EnvironmentOptions());
     }
 
-    private Task<Uri> GetRadarSourceAsync()
+    private Task<Uri> GetRadarSourceAsync(bool dashboard)
     {
         var mapTheme = ResolveMapTheme(ViewModel.Theme);
-        var source = new Uri($"https://forecastcenter.local/radar.html?lat={ViewModel.CurrentLocation.Latitude}&lon={ViewModel.CurrentLocation.Longitude}&theme={mapTheme}&ct={Uri.EscapeDataString(ViewModel.Temperature)}&snow={(ViewModel.RadarSnowPossible ? 1 : 0)}&ft=&cities=%5B%5D");
+        var source = new Uri($"https://forecastcenter.local/radar.html?lat={ViewModel.CurrentLocation.Latitude}&lon={ViewModel.CurrentLocation.Longitude}&theme={mapTheme}&ct={Uri.EscapeDataString(ViewModel.Temperature)}&snow={(ViewModel.RadarSnowPossible ? 1 : 0)}&dashboard={(dashboard ? 1 : 0)}&ft=&cities=%5B%5D");
         return Task.FromResult(source);
     }
 
     private void RadarWebMessageReceived(object? sender, Microsoft.Web.WebView2.Core.CoreWebView2WebMessageReceivedEventArgs e)
     {
-        if (WeatherPage.Visibility != Visibility.Visible) return;
         try
         {
             using var message = JsonDocument.Parse(e.TryGetWebMessageAsString());
-            if (message.RootElement.GetProperty("type").GetString() != "pageWheel") return;
+            var type = message.RootElement.GetProperty("type").GetString();
+            if (type == "radarHover")
+            {
+                var visible = message.RootElement.GetProperty("visible").GetBoolean();
+                DispatcherQueue.TryEnqueue(() => DashboardRadarExpandHint.Opacity = visible ? 1 : 0);
+                return;
+            }
+            if (type == "expandRadar")
+            {
+                DispatcherQueue.TryEnqueue(() => OpenRadar_Click(this, new RoutedEventArgs()));
+                return;
+            }
+            if (type != "pageWheel" || WeatherPage.Visibility != Visibility.Visible) return;
             var delta = message.RootElement.GetProperty("delta").GetDouble();
             WeatherPage.ChangeView(null, Math.Clamp(WeatherPage.VerticalOffset + delta, 0, WeatherPage.ScrollableHeight), null, true);
         }
