@@ -38,7 +38,7 @@ The same installer can be downloaded manually from [GitHub Releases](https://git
 
 Forecast Center checks once a day for a newer stable release. Update checks can also be run manually from Settings > About; downloads open the corresponding GitHub release page.
 
-A copy of the accepted WinGet community manifest is maintained under `winget/`. Version 0.9.0 is unsigned, so Windows SmartScreen may still request confirmation during installation.
+A copy of the accepted WinGet community manifest is maintained under `winget/`. Current unsigned installers may still trigger a Windows SmartScreen confirmation.
 
 This is currently an x64, per-user installer. Windows may show a SmartScreen warning because the installer is not code-signed.
 

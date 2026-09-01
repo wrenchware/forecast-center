@@ -2,6 +2,25 @@
 
 Notable user-facing changes to Forecast Center are recorded here. GitHub Releases contain matching downloadable installer notes.
 
+## 1.0.0 - 2026-08-31
+
+### Added
+
+- A moon-phase card showing today, the next New Moon, and the next Full Moon.
+- Click-to-expand dashboard radar with a responsive immersive view.
+
+### Improved
+
+- Reworked the dashboard footer into balanced Tide and Moon cards.
+- Replaced the sidebar with direct dashboard actions and a discoverable Settings button beside the location switcher.
+- Refined radar hover controls, attribution behavior, and full-screen map framing.
+- Expanded tide high/low panels to use card space more evenly at wide window sizes.
+
+### Fixed
+
+- Removed obsolete sidebar state and first-run guidance after the dashboard navigation redesign.
+- Improved expanded future-radar framing on wide displays.
+
 ## 0.9.0 - 2026-08-29
 
 ### Added
