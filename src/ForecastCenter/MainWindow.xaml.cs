@@ -80,6 +80,8 @@ public sealed partial class MainWindow : Window
         {
             if (args.PropertyName == nameof(ViewModel.TideStationName))
                 DispatcherQueue.TryEnqueue(SyncTideStationPickers);
+            else if (args.PropertyName == nameof(ViewModel.TideVisibility))
+                DispatcherQueue.TryEnqueue(() => UpdateForecastLayout(DashboardGrid.ActualWidth));
         };
         NormalizeCommandCardTints();
         SetRadarAttributionOpacity(0);
@@ -1037,10 +1039,22 @@ public sealed partial class MainWindow : Window
 
     private void UpdateBottomFeatureAspectRatio(double contentWidth)
     {
-        // Keep the full-width tide summary intentionally compact.
-        var tideHeight = contentWidth < 700 ? 220d : 190d;
-        if (Math.Abs(DashboardDetailsCard.Height - tideHeight) > 0.5)
-            DashboardDetailsCard.Height = tideHeight;
+        const double cardHeight = 270;
+        DashboardDetailsCard.Height = cardHeight;
+        DashboardMoonCard.Height = cardHeight;
+
+        var tidesVisible = ViewModel.TideVisibility == Visibility.Visible;
+        var stackCards = tidesVisible && contentWidth < 920;
+        DashboardDetailColumn1.Width = new GridLength(1, GridUnitType.Star);
+        DashboardDetailColumn2.Width = stackCards || !tidesVisible ? new GridLength(0) : new GridLength(1, GridUnitType.Star);
+        DashboardDetailSecondRow.Height = stackCards ? GridLength.Auto : new GridLength(0);
+
+        Grid.SetColumn(DashboardDetailsCard, 0);
+        Grid.SetRow(DashboardDetailsCard, 0);
+        Grid.SetColumnSpan(DashboardDetailsCard, stackCards ? 2 : 1);
+        Grid.SetColumn(DashboardMoonCard, stackCards ? 0 : tidesVisible ? 1 : 0);
+        Grid.SetRow(DashboardMoonCard, stackCards ? 1 : 0);
+        Grid.SetColumnSpan(DashboardMoonCard, stackCards || !tidesVisible ? 2 : 1);
     }
 
     private void UpdateForecastLayout(double dashboardWidth)

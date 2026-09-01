@@ -78,6 +78,14 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private string tideCatalogAttentionText = "";
     [ObservableProperty] private Microsoft.UI.Xaml.Visibility tideCatalogAttentionVisibility = Microsoft.UI.Xaml.Visibility.Collapsed;
     [ObservableProperty] private Microsoft.UI.Xaml.Visibility tideVisibility = Microsoft.UI.Xaml.Visibility.Visible;
+    [ObservableProperty] private string moonPhaseName = "Calculating moon phase…";
+    [ObservableProperty] private string moonPhaseGlyph = "🌑";
+    [ObservableProperty] private string moonIllumination = "—";
+    [ObservableProperty] private string moonAge = "—";
+    [ObservableProperty] private string moonNextPhase = "—";
+    [ObservableProperty] private string moonTodayDate = "—";
+    [ObservableProperty] private string nextNewMoonDate = "—";
+    [ObservableProperty] private string nextFullMoonDate = "—";
     private TideSnapshot? _latestTideSnapshot;
 
     public ObservableCollection<HourlyItem> Hours { get; } = [];
@@ -432,6 +440,7 @@ public partial class MainViewModel : ObservableObject
         Sunrise = s.Daily.Count > 0 ? s.Daily[0].Sunrise.ToString("t") : "—";
         Sunset = s.Daily.Count > 0 ? s.Daily[0].Sunset.ToString("t") : "—";
         SunTimes = $"{Sunrise} / {Sunset}";
+        ApplyMoonPhase();
         ApplyCommandCenterSummaries(s);
         ApplyNextHourPrecipitation(s);
         RadarSnowPossible = s.Hourly.Take(48).Any(x =>
@@ -446,6 +455,46 @@ public partial class MainViewModel : ObservableObject
             $"{x.High:0}{degree}", $"{x.Low:0}{degree}", $"{x.PrecipitationProbability}%", ForecastTint(x.WeatherCode, true),
             x.Sunrise.ToString("t"), x.Sunset.ToString("t"),
             narratives.TryGetValue(DateOnly.FromDateTime(x.Date), out var narrative) ? narrative : $"{WeatherCode.Description(x.WeatherCode)} with a high near {x.High:0}{degree} and a low near {x.Low:0}{degree}. The chance of precipitation is {x.PrecipitationProbability}%.")));
+    }
+
+    private void ApplyMoonPhase()
+    {
+        const double lunarCycleDays = 29.530588853;
+        var epoch = new DateTimeOffset(2000, 1, 6, 18, 14, 0, TimeSpan.Zero);
+        var elapsedDays = (DateTimeOffset.UtcNow - epoch).TotalDays;
+        var phase = ((elapsedDays / lunarCycleDays) % 1 + 1) % 1;
+        var age = phase * lunarCycleDays;
+        var illumination = (1 - Math.Cos(phase * Math.PI * 2)) / 2;
+        var phaseIndex = (int)Math.Round(phase * 8) % 8;
+        string[] names = ["New Moon", "Waxing Crescent", "First Quarter", "Waxing Gibbous", "Full Moon", "Waning Gibbous", "Last Quarter", "Waning Crescent"];
+        string[] glyphs = ["🌑", "🌒", "🌓", "🌔", "🌕", "🌖", "🌗", "🌘"];
+
+        MoonPhaseName = names[phaseIndex];
+        MoonPhaseGlyph = glyphs[phaseIndex];
+        MoonIllumination = $"{illumination * 100:0}% illuminated";
+        MoonAge = $"Lunar day {age:0.0} of 29.5";
+        MoonTodayDate = DateTime.Now.ToString("ddd, MMM d");
+
+        var daysToNewMoon = (1 - phase) * lunarCycleDays;
+        if (daysToNewMoon < .1) daysToNewMoon = lunarCycleDays;
+        var daysToFullMoon = (phase < .5 ? .5 - phase : 1.5 - phase) * lunarCycleDays;
+        NextNewMoonDate = DateTime.Now.AddDays(daysToNewMoon).ToString("ddd, MMM d");
+        NextFullMoonDate = DateTime.Now.AddDays(daysToFullMoon).ToString("ddd, MMM d");
+
+        var milestones = new (double Phase, string Name)[]
+        {
+            (.25, "First Quarter"), (.5, "Full Moon"), (.75, "Last Quarter"), (1, "New Moon")
+        };
+        var next = milestones.First(item => item.Phase > phase);
+        var until = TimeSpan.FromDays((next.Phase - phase) * lunarCycleDays);
+        MoonNextPhase = $"{next.Name} in {FormatMoonDuration(until)}";
+    }
+
+    private static string FormatMoonDuration(TimeSpan duration)
+    {
+        if (duration.TotalDays >= 2) return $"{Math.Round(duration.TotalDays):0} days";
+        if (duration.TotalDays >= 1) return $"1 day, {duration.Hours} hr";
+        return $"{Math.Max(1, (int)Math.Round(duration.TotalHours))} hr";
     }
 
     private void ApplyNextHourPrecipitation(WeatherSnapshot snapshot)
