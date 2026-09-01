@@ -10,7 +10,7 @@ Notable user-facing changes to Forecast Center are recorded here. GitHub Release
 
 ### Improved
 
-- Keep longer hero forecasts compact at three lines and show the complete narrative immediately in the app's standard forecast tooltip.
+- Keep longer hero forecasts compact at three lines and show the complete narrative in the app's standard forecast tooltip only when the text is truncated.
 - Use a consistent home-icon Dashboard action across Settings, Radar, and Alerts pages.
 - Corrected the public-edition description on the About page.
 - Keep animated hourly and 10-day pages full-width with aligned, rounded pager controls and matching hourly hover feedback.

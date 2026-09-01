@@ -440,7 +440,7 @@ public sealed partial class MainWindow : Window
 
     private void HeroForecast_PointerEntered(object sender, PointerRoutedEventArgs e)
     {
-        if (sender is not TextBlock summary || string.IsNullOrWhiteSpace(ViewModel.ForecastSummary)) return;
+        if (sender is not TextBlock { IsTextTrimmed: true } summary || string.IsNullOrWhiteSpace(ViewModel.ForecastSummary)) return;
         var palette = ForecastToolTipPalette();
         var toolTip = new ToolTip
         {
