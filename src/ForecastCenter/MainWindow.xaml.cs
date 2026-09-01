@@ -39,7 +39,6 @@ public sealed partial class MainWindow : Window
     private readonly DispatcherQueueTimer _windowStateTimer;
     private readonly DispatcherQueueTimer _weatherRefreshTimer;
     private readonly DispatcherQueueTimer _tideStatusTimer;
-    private readonly DispatcherQueueTimer _sidebarAutoHideTimer;
     private DateTimeOffset _lastWeatherRefresh = DateTimeOffset.MinValue;
     private double _pendingDashboardWidth;
     private int _visibleHourlyCards = 1;
@@ -66,8 +65,6 @@ public sealed partial class MainWindow : Window
     private readonly string _radarStartupLogPath = Path.Combine(AppIdentity.DataRoot, "radar-startup.log");
     private Task<Microsoft.Web.WebView2.Core.CoreWebView2Environment>? _webViewEnvironmentTask;
     private ToolTip? _activeForecastToolTip;
-    private bool _pointerInsideNavigationPane;
-    private bool _updatingSidebarPin;
     private readonly UpdateService _updateService = new();
     private TextBlock? _updateStatusText;
     private Button? _checkForUpdatesButton;
@@ -111,14 +108,6 @@ public sealed partial class MainWindow : Window
         _tideStatusTimer.Interval = TimeSpan.FromMinutes(1);
         _tideStatusTimer.IsRepeating = true;
         _tideStatusTimer.Tick += (_, _) => ViewModel.UpdateTideStatus();
-        _sidebarAutoHideTimer = DispatcherQueue.CreateTimer();
-        _sidebarAutoHideTimer.Interval = TimeSpan.FromSeconds(2);
-        _sidebarAutoHideTimer.IsRepeating = false;
-        _sidebarAutoHideTimer.Tick += SidebarAutoHideTimer_Tick;
-        Nav.IsPaneVisible = false;
-        Nav.IsPaneOpen = false;
-        UpdateNavigationContentCorner();
-        UpdateSidebarToggleIcon();
         Title = "Forecast Center";
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(TitleBarDragRegion);
@@ -657,97 +646,6 @@ public sealed partial class MainWindow : Window
         UpdateDefaultLocationButton();
     }
 
-    private async void ToggleSidebar_Click(object sender, RoutedEventArgs e)
-    {
-        NavigationTeachingTip.IsOpen = false;
-        _sidebarAutoHideTimer.Stop();
-        Nav.IsPaneVisible = !Nav.IsPaneVisible;
-        Nav.IsPaneOpen = Nav.IsPaneVisible;
-        UpdateSidebarToggleIcon();
-        UpdateNavigationContentCorner();
-        await ViewModel.SetSidebarVisibleAsync(Nav.IsPaneVisible);
-        if (Nav.IsPaneVisible && !ViewModel.SidebarPinned) _sidebarAutoHideTimer.Start();
-    }
-
-    private async void NavigationTeachingTip_Closed(TeachingTip sender, TeachingTipClosedEventArgs args)
-    {
-        await ViewModel.DismissNavigationTipAsync();
-    }
-
-    private void NavigationPane_PointerEntered(object sender, PointerRoutedEventArgs e)
-    {
-        _pointerInsideNavigationPane = true;
-        _sidebarAutoHideTimer.Stop();
-    }
-
-    private void NavigationPane_PointerExited(object sender, PointerRoutedEventArgs e)
-    {
-        _pointerInsideNavigationPane = false;
-        if (!ViewModel.SidebarPinned && Nav.IsPaneVisible)
-        {
-            _sidebarAutoHideTimer.Stop();
-            _sidebarAutoHideTimer.Start();
-        }
-    }
-
-    private async void SidebarAutoHideTimer_Tick(DispatcherQueueTimer sender, object args)
-    {
-        if (ViewModel.SidebarPinned || _pointerInsideNavigationPane || !Nav.IsPaneVisible) return;
-        await HideUnpinnedSidebarAsync();
-    }
-
-    private void Nav_ItemInvoked(NavigationView sender, NavigationViewItemInvokedEventArgs args)
-    {
-        if (ViewModel.SidebarPinned || !Nav.IsPaneVisible) return;
-        _sidebarAutoHideTimer.Stop();
-        // Defer until NavigationView finishes committing the invoked selection.
-        DispatcherQueue.TryEnqueue(async () => await HideUnpinnedSidebarAsync());
-    }
-
-    private async Task HideUnpinnedSidebarAsync()
-    {
-        if (ViewModel.SidebarPinned || !Nav.IsPaneVisible) return;
-        Nav.IsPaneVisible = false;
-        Nav.IsPaneOpen = false;
-        UpdateSidebarToggleIcon();
-        UpdateNavigationContentCorner();
-        await ViewModel.SetSidebarVisibleAsync(false);
-    }
-
-    private async void PinSidebarButton_Checked(object sender, RoutedEventArgs e)
-    {
-        if (_updatingSidebarPin) return;
-        _sidebarAutoHideTimer.Stop();
-        await ViewModel.SetSidebarPinnedAsync(true);
-        if (!Nav.IsPaneVisible)
-        {
-            Nav.IsPaneVisible = Nav.IsPaneOpen = true;
-            await ViewModel.SetSidebarVisibleAsync(true);
-            UpdateSidebarToggleIcon();
-            UpdateNavigationContentCorner();
-        }
-        UpdateSidebarPinPresentation();
-    }
-
-    private async void PinSidebarButton_Unchecked(object sender, RoutedEventArgs e)
-    {
-        if (_updatingSidebarPin) return;
-        await ViewModel.SetSidebarPinnedAsync(false);
-        UpdateSidebarPinPresentation();
-        if (!_pointerInsideNavigationPane && Nav.IsPaneVisible) _sidebarAutoHideTimer.Start();
-    }
-
-    private void UpdateSidebarPinPresentation()
-    {
-        var pinned = PinSidebarButton.IsChecked == true;
-        PinSidebarIcon.Glyph = "\uE718";
-        PinSidebarIcon.Opacity = pinned ? 1 : 0.62;
-        PinSidebarIcon.Foreground = pinned
-            ? (Brush)Application.Current.Resources["AccentTextFillColorPrimaryBrush"]
-            : (Brush)Application.Current.Resources["TextFillColorPrimaryBrush"];
-        ToolTipService.SetToolTip(PinSidebarButton, pinned ? "Allow navigation to auto-hide" : "Keep navigation open");
-    }
-
     private static void AnimatePageEntrance(FrameworkElement page)
     {
         var visual = ElementCompositionPreview.GetElementVisual(page);
@@ -781,90 +679,6 @@ public sealed partial class MainWindow : Window
         DashboardSkeleton.Visibility = Visibility.Collapsed;
         skeletonVisual.StopAnimation(nameof(skeletonVisual.Opacity));
         skeletonVisual.Opacity = 1;
-    }
-
-    private void UpdateSidebarToggleIcon()
-    {
-        SidebarToggleIcon.Glyph = Nav.IsPaneVisible ? "\uE89F" : "\uE8A0";
-        PinSidebarButton.Visibility = Nav.IsPaneVisible ? Visibility.Visible : Visibility.Collapsed;
-    }
-
-    private void Nav_Loaded(object sender, RoutedEventArgs e)
-    {
-        UpdateNavigationContentCorner();
-        _updatingSidebarPin = true;
-        PinSidebarButton.IsChecked = ViewModel.SidebarPinned;
-        _updatingSidebarPin = false;
-        UpdateSidebarPinPresentation();
-        if (FindNamedDescendant(Nav, "PaneContentGrid") is FrameworkElement paneContent)
-        {
-            paneContent.PointerEntered += NavigationPane_PointerEntered;
-            paneContent.PointerExited += NavigationPane_PointerExited;
-        }
-        if (Nav.IsPaneVisible && !ViewModel.SidebarPinned) _sidebarAutoHideTimer.Start();
-        if (Nav.SettingsItem is NavigationViewItem settingsItem)
-        {
-            settingsItem.MinHeight = 42;
-            settingsItem.Margin = new Thickness(4, 2, 4, 4);
-            settingsItem.CornerRadius = new CornerRadius(8);
-            settingsItem.Icon = new FontIcon { FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Segoe Fluent Icons"), FontSize = 16, Glyph = "\uE713" };
-        }
-        DispatcherQueue.TryEnqueue(PolishNavigationIndicators);
-        var labels = Nav.MenuItems.OfType<NavigationViewItem>().Select(x => x.Content?.ToString() ?? "").Append("Settings");
-        var widestLabel = labels.Select(label =>
-        {
-            var text = new TextBlock { Text = label, FontSize = 14 };
-            text.Measure(new Windows.Foundation.Size(double.PositiveInfinity, double.PositiveInfinity));
-            return text.DesiredSize.Width;
-        }).DefaultIfEmpty(0).Max();
-
-        // Account for the icon, label gap, balanced padding, item margins, and the
-        // NavigationView's internal content presenter inset so labels never clip.
-        Nav.OpenPaneLength = Math.Ceiling(widestLabel + 20 + 12 + 52 + 8);
-    }
-
-    private void PolishNavigationIndicators()
-    {
-        var items = Nav.MenuItems.OfType<NavigationViewItem>().ToList();
-        if (Nav.SettingsItem is NavigationViewItem settingsItem) items.Add(settingsItem);
-        foreach (var item in items)
-        {
-            if (FindNamedDescendant(item, "SelectionIndicator") is FrameworkElement indicator)
-            {
-                indicator.Height = 22;
-                indicator.VerticalAlignment = VerticalAlignment.Center;
-                if (indicator is Border border) border.CornerRadius = new CornerRadius(2);
-            }
-        }
-    }
-
-    private void UpdateNavigationContentCorner()
-    {
-        var radius = Nav.IsPaneVisible ? new CornerRadius(8, 0, 0, 0) : new CornerRadius(0);
-        Nav.Resources["NavigationViewContentGridCornerRadius"] = radius;
-        if (FindNamedDescendant(Nav, "ContentGrid") is Grid contentGrid) contentGrid.CornerRadius = radius;
-    }
-
-    private static FrameworkElement? FindNamedDescendant(DependencyObject parent, string name)
-    {
-        for (var index = 0; index < VisualTreeHelper.GetChildrenCount(parent); index++)
-        {
-            var child = VisualTreeHelper.GetChild(parent, index);
-            if (child is FrameworkElement element && element.Name == name) return element;
-            var match = FindNamedDescendant(child, name);
-            if (match is not null) return match;
-        }
-        return null;
-    }
-
-    private static void ReplaceDescendantText(DependencyObject parent, string startsWith, string replacement)
-    {
-        for (var index = 0; index < VisualTreeHelper.GetChildrenCount(parent); index++)
-        {
-            var child = VisualTreeHelper.GetChild(parent, index);
-            if (child is TextBlock text && text.Text.StartsWith(startsWith, StringComparison.OrdinalIgnoreCase)) text.Text = replacement;
-            ReplaceDescendantText(child, startsWith, replacement);
-        }
     }
 
     private void UpdateDefaultLocationButton() => DefaultLocationButton.Visibility = ViewModel.IsCurrentLocationDefault ? Visibility.Collapsed : Visibility.Visible;
@@ -1676,40 +1490,6 @@ public sealed partial class MainWindow : Window
             if (webView.CoreWebView2 is null) continue;
             try { await webView.CoreWebView2.ExecuteScriptAsync($"window.setMapTheme?.('{mapTheme}');"); }
             catch { }
-        }
-    }
-
-    private async void Nav_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
-    {
-        var tag = (args.SelectedItemContainer?.Tag as string) ?? "weather";
-        WeatherPage.Visibility = RadarPage.Visibility = AlertsPage.Visibility = SettingsPage.Visibility = Visibility.Collapsed;
-        if (args.IsSettingsSelected)
-        {
-            ResetSettingsToGeneral();
-            SettingsPage.Visibility = Visibility.Visible;
-            AnimatePageEntrance(SettingsPage);
-            return;
-        }
-        if (tag == "radar")
-        {
-            RadarPage.Visibility = Visibility.Visible;
-            AnimatePageEntrance(RadarPage);
-            if (!_radarReady)
-            {
-                _radarReady = true;
-                await InitializeRadarAsync(RadarWebView);
-            }
-        }
-        else if (tag == "alerts")
-        {
-            AlertsPage.Visibility = Visibility.Visible;
-            AnimatePageEntrance(AlertsPage);
-        }
-        else
-        {
-            RefreshLocationPicker();
-            WeatherPage.Visibility = Visibility.Visible;
-            AnimatePageEntrance(WeatherPage);
         }
     }
 

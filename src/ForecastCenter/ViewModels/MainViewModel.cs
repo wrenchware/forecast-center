@@ -108,9 +108,6 @@ public partial class MainViewModel : ObservableObject
     public bool AutomaticLocation => _settings.Current.AutomaticLocation;
     public bool StartWithWindows => _settings.Current.StartWithWindows;
     public string Theme => _settings.Current.Theme;
-    public bool SidebarVisible => _settings.Current.SidebarVisible;
-    public bool SidebarPinned => _settings.Current.SidebarPinned;
-    public bool NavigationTipDismissed => _settings.Current.NavigationTipDismissed;
     public bool MinimizeToTray => _settings.Current.MinimizeToTray;
     public bool UseGlobalTideStation => _settings.Current.UseGlobalTideStation;
     public string? TideStationId => UseGlobalTideStation
@@ -209,25 +206,6 @@ public partial class MainViewModel : ObservableObject
     {
         await _settings.SaveAsync(_settings.Current with { DefaultLocation = CurrentLocation });
         OnPropertyChanged(nameof(IsCurrentLocationDefault));
-    }
-
-    public async Task SetSidebarVisibleAsync(bool visible)
-    {
-        await _settings.SaveAsync(_settings.Current with { SidebarVisible = visible });
-        OnPropertyChanged(nameof(SidebarVisible));
-    }
-
-    public async Task SetSidebarPinnedAsync(bool pinned)
-    {
-        await _settings.SaveAsync(_settings.Current with { SidebarPinned = pinned });
-        OnPropertyChanged(nameof(SidebarPinned));
-    }
-
-    public async Task DismissNavigationTipAsync()
-    {
-        if (_settings.Current.NavigationTipDismissed) return;
-        await _settings.SaveAsync(_settings.Current with { NavigationTipDismissed = true });
-        OnPropertyChanged(nameof(NavigationTipDismissed));
     }
 
     public async Task SetMinimizeToTrayAsync(bool enabled)

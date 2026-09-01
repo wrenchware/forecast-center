@@ -16,26 +16,8 @@
                 </LinearGradientBrush>
             </Grid.Background>
         </Grid>
-        <Grid x:Name="TitleBarDragRegion" Grid.Row="0" Height="48" Padding="12,0,150,0" Background="Transparent"><Button x:Name="SidebarToggleButton" Visibility="Collapsed"/><ToggleButton x:Name="PinSidebarButton" Visibility="Collapsed"/><FontIcon x:Name="SidebarToggleIcon" Visibility="Collapsed"/><FontIcon x:Name="PinSidebarIcon" Visibility="Collapsed"/></Grid>
-        <NavigationView Grid.Row="1" x:Name="Nav" Background="Transparent" BorderBrush="Transparent" BorderThickness="0" IsBackButtonVisible="Collapsed" IsSettingsVisible="False" IsPaneToggleButtonVisible="False" IsPaneVisible="False" PaneDisplayMode="Left" IsPaneOpen="False" Loaded="Nav_Loaded" SelectionChanged="Nav_SelectionChanged">
-            <NavigationView.Resources>
-                <CornerRadius x:Key="NavigationViewContentGridCornerRadius">8,0,0,0</CornerRadius>
-                <SolidColorBrush x:Key="NavigationViewContentBackground" Color="Transparent"/>
-                <SolidColorBrush x:Key="NavigationViewContentGridBorderBrush" Color="Transparent"/>
-                <Style TargetType="NavigationViewItem">
-                    <Setter Property="MinHeight" Value="42"/>
-                    <Setter Property="Margin" Value="4,2"/>
-                    <Setter Property="CornerRadius" Value="8"/>
-                </Style>
-            </NavigationView.Resources>
-            <NavigationView.MenuItems>
-                <NavigationViewItem Content="Weather" Tag="weather"><NavigationViewItem.Icon><FontIcon FontFamily="Segoe Fluent Icons" FontSize="16" Glyph="&#xE706;"/></NavigationViewItem.Icon></NavigationViewItem>
-                <NavigationViewItem x:Name="RadarNavItem" Content="Radar" Tag="radar"><NavigationViewItem.Icon><FontIcon FontFamily="Segoe Fluent Icons" FontSize="16" Glyph="&#xE81E;"/></NavigationViewItem.Icon></NavigationViewItem>
-                <NavigationViewItem x:Name="AlertsNavItem" Content="Alerts" Tag="alerts"><NavigationViewItem.Icon><FontIcon FontFamily="Segoe Fluent Icons" FontSize="16" Glyph="&#xE7BA;"/></NavigationViewItem.Icon></NavigationViewItem>
-            </NavigationView.MenuItems>
-            <NavigationView.PaneFooter>
-                <Border Height="1" Margin="12,10,12,6" Background="{ThemeResource DividerStrokeColorDefaultBrush}" Opacity="0.65"/>
-            </NavigationView.PaneFooter>
+        <Grid x:Name="TitleBarDragRegion" Grid.Row="0" Height="48" Padding="12,0,150,0" Background="Transparent"/>
+        <Grid Grid.Row="1">
             <Grid>
                 <ScrollViewer x:Name="WeatherPage" HorizontalScrollMode="Disabled" VerticalScrollMode="Enabled" VerticalScrollBarVisibility="Auto">
                     <Grid x:Name="DashboardGrid" Padding="28,18,28,36" HorizontalAlignment="Stretch" SizeChanged="DashboardGrid_SizeChanged">
@@ -298,12 +280,6 @@
                     </NavigationView>
                 </Grid>
             </Grid>
-        </NavigationView>
-        <TeachingTip x:Name="NavigationTeachingTip" Grid.RowSpan="2" IsOpen="False"
-                     Target="{x:Bind SidebarToggleButton}"
-                     Title="Explore Forecast Center"
-                     Subtitle="Use this button to open Radar, Alerts, Settings, and other app sections. You can pin the menu open whenever you like."
-                     PreferredPlacement="BottomRight" CloseButtonContent="Got it"
-                     IsLightDismissEnabled="True" Closed="NavigationTeachingTip_Closed"/>
+        </Grid>
     </Grid>
 </Window>
