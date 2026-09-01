@@ -2,6 +2,24 @@
 
 Notable user-facing changes to Forecast Center are recorded here. GitHub Releases contain matching downloadable installer notes.
 
+## 1.0.1 - Unreleased
+
+### Added
+
+- Added an optional Ko-fi support card to About. Donations do not unlock features or benefits.
+
+### Improved
+
+- Keep longer hero forecasts compact at three lines and show the complete narrative immediately in the app's standard forecast tooltip.
+- Use a consistent home-icon Dashboard action across Settings, Radar, and Alerts pages.
+- Corrected the public-edition description on the About page.
+- Keep animated hourly and 10-day pages full-width with aligned, rounded pager controls and matching hourly hover feedback.
+- Use a cleaner borderless treatment for detailed forecast and trend tooltips.
+
+### Fixed
+
+- Prevent a WinUI layout cycle when paging forecasts and resizing the window.
+
 ## 1.0.0 - 2026-08-31
 
 ### Added

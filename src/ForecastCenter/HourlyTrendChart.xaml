@@ -23,7 +23,7 @@
         <Canvas x:Name="ChartCanvas" MinHeight="64" IsHitTestVisible="False" SizeChanged="ChartCanvas_SizeChanged"/>
         <Popup x:Name="HoverPopup" IsLightDismissEnabled="False">
             <Border x:Name="HoverTip" IsHitTestVisible="False" Padding="12" CornerRadius="12"
-                    Background="{ThemeResource ChartToolTipBackground}" BorderBrush="{ThemeResource ChartToolTipBorder}" BorderThickness="1">
+                    Background="{ThemeResource ChartToolTipBackground}" BorderThickness="0">
                 <TextBlock x:Name="HoverTipText" Foreground="{ThemeResource ChartToolTipForeground}" FontSize="12" LineHeight="18"/>
             </Border>
         </Popup>

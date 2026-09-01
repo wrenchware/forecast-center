@@ -41,7 +41,11 @@ public sealed partial class MainWindow : Window
     private readonly DispatcherQueueTimer _tideStatusTimer;
     private DateTimeOffset _lastWeatherRefresh = DateTimeOffset.MinValue;
     private double _pendingDashboardWidth;
+    private double _lastDashboardLayoutWidth = double.NaN;
     private int _visibleHourlyCards = 1;
+    private int _forecastBaseCardWidth = 120;
+    private int _forecastExtraPixelCards;
+    private int _forecastPageWidth = 120;
     private RadioButtons? _themeRadio;
     private ComboBox? _tideStationPicker;
     private CheckBox? _minimizeToTrayCheckBox;
@@ -65,6 +69,8 @@ public sealed partial class MainWindow : Window
     private readonly string _radarStartupLogPath = Path.Combine(AppIdentity.DataRoot, "radar-startup.log");
     private Task<Microsoft.Web.WebView2.Core.CoreWebView2Environment>? _webViewEnvironmentTask;
     private ToolTip? _activeForecastToolTip;
+    private FrameworkElement? _activeForecastToolTipOwner;
+    private bool _forecastPagerUpdateQueued;
     private readonly UpdateService _updateService = new();
     private TextBlock? _updateStatusText;
     private Button? _checkForUpdatesButton;
@@ -431,6 +437,37 @@ public sealed partial class MainWindow : Window
 
     private void CurrentWeatherCard_PointerEntered(object sender, PointerRoutedEventArgs e) => HeroRefreshButton.Opacity = 1;
     private void CurrentWeatherCard_PointerExited(object sender, PointerRoutedEventArgs e) => HeroRefreshButton.Opacity = 0;
+
+    private void HeroForecast_PointerEntered(object sender, PointerRoutedEventArgs e)
+    {
+        if (sender is not TextBlock summary || string.IsNullOrWhiteSpace(ViewModel.ForecastSummary)) return;
+        var palette = ForecastToolTipPalette();
+        var toolTip = new ToolTip
+        {
+            Content = new TextBlock
+            {
+                Text = ViewModel.ForecastSummary,
+                TextWrapping = TextWrapping.Wrap,
+                LineHeight = 20,
+                Foreground = palette.Foreground
+            },
+            MaxWidth = 420,
+            Padding = new Thickness(12),
+            CornerRadius = new CornerRadius(12),
+            Foreground = palette.Foreground,
+            Background = palette.Background,
+            BorderThickness = new Thickness(0)
+        };
+        ToolTipService.SetToolTip(summary, toolTip);
+        ToolTipService.SetPlacement(summary, Microsoft.UI.Xaml.Controls.Primitives.PlacementMode.Bottom);
+        OpenForecastToolTip(summary, toolTip);
+    }
+
+    private void HeroForecast_PointerExited(object sender, PointerRoutedEventArgs e)
+    {
+        if (sender is FrameworkElement summary) CloseForecastToolTip(summary);
+    }
+
     private void NormalizeCommandCardTints()
     {
         NearTermCard.Background = new SolidColorBrush(ColorHelper.FromArgb(14, 42, 142, 219));
@@ -818,9 +855,9 @@ public sealed partial class MainWindow : Window
         if (DashboardRadarWebView.CoreWebView2 is not null) DashboardRadarWebView.Source = await GetRadarSourceAsync(true);
         if (_radarReady && RadarWebView.CoreWebView2 is not null) RadarWebView.Source = await GetRadarSourceAsync(false);
     }
-    private void ForecastScroll_Click(object sender, RoutedEventArgs e)
+    private void ForecastScroll_Tapped(object sender, TappedRoutedEventArgs e)
     {
-        if (sender is not Button { Tag: string tag }) return;
+        if (sender is not FrameworkElement { Tag: string tag }) return;
         CloseActiveForecastToolTip();
         var scroller = tag.StartsWith("hourly", StringComparison.Ordinal) ? HourlyScroller : DailyScroller;
         var direction = tag.EndsWith("right", StringComparison.Ordinal) ? 1 : -1;
@@ -843,11 +880,20 @@ public sealed partial class MainWindow : Window
     private void ForecastScroller_ViewChanged(object sender, ScrollViewerViewChangedEventArgs e)
     {
         CloseActiveForecastToolTip();
-        if (sender is ScrollViewer scroller)
+        QueueForecastPagerUpdate();
+    }
+
+    private void QueueForecastPagerUpdate()
+    {
+        if (_forecastPagerUpdateQueued) return;
+        _forecastPagerUpdateQueued = true;
+        DispatcherQueue.TryEnqueue(() =>
         {
-            UpdatePagerButtons(scroller);
-            if (ReferenceEquals(scroller, HourlyScroller)) UpdateHourlyTrendRange();
-        }
+            _forecastPagerUpdateQueued = false;
+            UpdatePagerButtons(HourlyScroller);
+            UpdatePagerButtons(DailyScroller);
+            UpdateHourlyTrendRange();
+        });
     }
 
     private void UpdatePagerButtons(ScrollViewer scroller)
@@ -858,17 +904,40 @@ public sealed partial class MainWindow : Window
         SetPagerButtonVisible(right, scroller.HorizontalOffset < scroller.ScrollableWidth - 0.5);
     }
 
-    private static void SetPagerButtonVisible(Button button, bool visible)
+    private static void SetPagerButtonVisible(FrameworkElement button, bool visible)
     {
-        button.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        button.Visibility = Visibility.Visible;
+        button.Opacity = visible ? 1 : 0;
         button.IsHitTestVisible = visible;
-        button.IsTabStop = visible;
     }
     private void DashboardGrid_SizeChanged(object sender, SizeChangedEventArgs e)
     {
+        if (Math.Abs(e.NewSize.Width - e.PreviousSize.Width) < 0.5) return;
         _pendingDashboardWidth = e.NewSize.Width;
         _resizeTimer.Stop();
         _resizeTimer.Start();
+    }
+
+    private void ForecastCarouselHost_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (sender is not FrameworkElement host || e.NewSize.Width <= 0 || e.NewSize.Height <= 0) return;
+        var visual = ElementCompositionPreview.GetElementVisual(host);
+        var geometry = visual.Compositor.CreateRoundedRectangleGeometry();
+        geometry.Size = new Vector2((float)e.NewSize.Width, (float)e.NewSize.Height);
+        geometry.CornerRadius = new Vector2(12, 12);
+        visual.Clip = visual.Compositor.CreateGeometricClip(geometry);
+
+        var scroller = ReferenceEquals(host, HourlyCarouselHost) ? HourlyScroller : DailyScroller;
+        var scrollerVisual = ElementCompositionPreview.GetElementVisual(scroller);
+        var innerGeometry = scrollerVisual.Compositor.CreateRoundedRectangleGeometry();
+        var rasterizationScale = host.XamlRoot?.RasterizationScale ?? 1d;
+        var physicalPixel = 1d / Math.Max(1d, rasterizationScale);
+        innerGeometry.Offset = new Vector2((float)physicalPixel, 0);
+        innerGeometry.Size = new Vector2(
+            (float)Math.Max(1, e.NewSize.Width - (physicalPixel * 2)),
+            (float)e.NewSize.Height);
+        innerGeometry.CornerRadius = new Vector2(12, 12);
+        scrollerVisual.Clip = scrollerVisual.Compositor.CreateGeometricClip(innerGeometry);
     }
 
     private void UpdateBottomFeatureAspectRatio(double contentWidth)
@@ -893,30 +962,64 @@ public sealed partial class MainWindow : Window
 
     private void UpdateForecastLayout(double dashboardWidth)
     {
+        if (!double.IsFinite(dashboardWidth) || dashboardWidth <= 0) return;
         // DashboardGrid's reported width includes its 28px padding on each side.
         var contentWidth = Math.Max(0, dashboardWidth - 56);
         UpdateDashboardResponsiveLayout(contentWidth);
         UpdateBottomFeatureAspectRatio(contentWidth);
+        if (double.IsFinite(_lastDashboardLayoutWidth) &&
+            Math.Abs(dashboardWidth - _lastDashboardLayoutWidth) < 0.5)
+            return;
+        _lastDashboardLayoutWidth = dashboardWidth;
         var carouselWidth = Math.Max(120, contentWidth);
         const double preferredCardWidth = 150;
         const double gap = 8;
         var visibleCards = Math.Max(1, (int)Math.Floor((carouselWidth + gap) / (preferredCardWidth + gap)));
         _visibleHourlyCards = visibleCards;
-        var cardWidth = (carouselWidth - ((visibleCards - 1) * gap)) / visibleCards;
-        HourlyLayout.MinItemWidth = cardWidth;
-        DailyLayout.MinItemWidth = cardWidth;
-        HourlySignalChart.ItemWidth = cardWidth;
+        var roundedCarouselWidth = Math.Max(120, (int)Math.Round(carouselWidth));
+        _forecastPageWidth = roundedCarouselWidth;
+        _forecastBaseCardWidth = Math.Max(1, (roundedCarouselWidth - ((visibleCards - 1) * (int)gap)) / visibleCards);
+        _forecastExtraPixelCards = roundedCarouselWidth -
+            ((_forecastBaseCardWidth * visibleCards) + ((visibleCards - 1) * (int)gap));
+        UpdateForecastItemWidths();
+        var chartItemWidth = (roundedCarouselWidth - ((visibleCards - 1) * gap)) / visibleCards;
+        if (Math.Abs(HourlySignalChart.ItemWidth - chartItemWidth) >= 0.5)
+            HourlySignalChart.ItemWidth = chartItemWidth;
         DispatcherQueue.TryEnqueue(() => { UpdatePagerButtons(HourlyScroller); UpdatePagerButtons(DailyScroller); UpdateHourlyTrendRange(); });
+    }
+
+    private void ForecastRepeater_ElementPrepared(ItemsRepeater sender, ItemsRepeaterElementPreparedEventArgs args)
+    {
+        if (args.Element is FrameworkElement element)
+            element.Width = ForecastCardWidth(args.Index);
+    }
+
+    private double ForecastCardWidth(int index)
+        => _forecastBaseCardWidth + ((index % Math.Max(1, _visibleHourlyCards)) < _forecastExtraPixelCards ? 1 : 0);
+
+    private void UpdateForecastItemWidths()
+    {
+        UpdateForecastItemWidths(HourlyRepeater, ViewModel.Hours.Count);
+        UpdateForecastItemWidths(DailyRepeater, ViewModel.Days.Count);
+    }
+
+    private void UpdateForecastItemWidths(ItemsRepeater repeater, int count)
+    {
+        for (var index = 0; index < count; index++)
+            if (repeater.TryGetElement(index) is FrameworkElement element)
+                element.Width = ForecastCardWidth(index);
     }
 
     private void UpdateHourlyTrendRange()
     {
-        if (ViewModel.HourlyTrend.Count == 0 || HourlyLayout.MinItemWidth <= 0) return;
+        if (ViewModel.HourlyTrend.Count == 0 || _forecastBaseCardWidth <= 0) return;
         const double gap = 8;
-        var start = (int)Math.Round(HourlyScroller.HorizontalOffset / (HourlyLayout.MinItemWidth + gap));
+        var cardPitch = Math.Max(1, HourlySignalChart.ItemWidth + gap);
+        var start = (int)Math.Round(HourlyScroller.HorizontalOffset / cardPitch);
         start = Math.Clamp(start, 0, ViewModel.HourlyTrend.Count - 1);
         var count = Math.Min(_visibleHourlyCards, ViewModel.HourlyTrend.Count - start);
-        HourlyTrendCard.Width = (count * HourlyLayout.MinItemWidth) + ((count - 1) * gap);
+        HourlyTrendCard.Width = _forecastPageWidth;
+        HourlyTrendCard.Opacity = 1;
         HourlySignalChart.StartIndex = start;
         HourlySignalChart.VisibleCount = count;
 
@@ -1000,8 +1103,7 @@ public sealed partial class MainWindow : Window
             CornerRadius = new CornerRadius(12),
             Foreground = palette.Foreground,
             Background = palette.Background,
-            BorderBrush = palette.Border,
-            BorderThickness = new Thickness(1)
+            BorderThickness = new Thickness(0)
         };
         ToolTipService.SetToolTip(button, toolTip);
         ToolTipService.SetPlacement(button, Microsoft.UI.Xaml.Controls.Primitives.PlacementMode.Bottom);
@@ -1019,6 +1121,7 @@ public sealed partial class MainWindow : Window
         if (sender is not Border { Tag: DateTime timestamp } card) return;
         var hour = ViewModel.Hours.FirstOrDefault(item => item.Timestamp == timestamp);
         if (hour is null) return;
+        SetHourlyCardHover(card, true);
 
         var content = new StackPanel { Spacing = 6, MaxWidth = 220, Padding = new Thickness(2) };
         content.Children.Add(new TextBlock { Text = hour.Time, FontSize = 13, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
@@ -1036,8 +1139,7 @@ public sealed partial class MainWindow : Window
             CornerRadius = new CornerRadius(12),
             Foreground = palette.Foreground,
             Background = palette.Background,
-            BorderBrush = palette.Border,
-            BorderThickness = new Thickness(1)
+            BorderThickness = new Thickness(0)
         };
         ToolTipService.SetToolTip(card, toolTip);
         OpenForecastToolTip(card, toolTip);
@@ -1059,12 +1161,33 @@ public sealed partial class MainWindow : Window
 
     private void HourlyForecastCard_PointerExited(object sender, PointerRoutedEventArgs e)
     {
-        if (sender is FrameworkElement card) CloseForecastToolTip(card);
+        if (sender is Border card)
+        {
+            SetHourlyCardHover(card, false);
+            CloseForecastToolTip(card);
+        }
+    }
+
+    private static void SetHourlyCardHover(Border card, bool hovered)
+    {
+        const string backgroundKey = "HourlyCardOriginalBackground";
+        if (hovered)
+        {
+            if (!card.Resources.ContainsKey(backgroundKey)) card.Resources[backgroundKey] = card.Background;
+            if (Application.Current.Resources["ControlFillColorSecondaryBrush"] is Brush hoverBackground)
+                card.Background = hoverBackground;
+            return;
+        }
+
+        if (card.Resources.ContainsKey(backgroundKey) && card.Resources[backgroundKey] is Brush originalBackground)
+            card.Background = originalBackground;
+        card.Resources.Remove(backgroundKey);
     }
 
     private void OpenForecastToolTip(FrameworkElement owner, ToolTip toolTip)
     {
         CloseActiveForecastToolTip();
+        _activeForecastToolTipOwner = owner;
         _activeForecastToolTip = toolTip;
         owner.Unloaded += ForecastToolTipOwner_Unloaded;
         toolTip.IsOpen = true;
@@ -1072,9 +1195,15 @@ public sealed partial class MainWindow : Window
 
     private void CloseForecastToolTip(FrameworkElement owner)
     {
+        if (ReferenceEquals(owner, _activeForecastToolTipOwner))
+        {
+            CloseActiveForecastToolTip();
+            return;
+        }
+
         owner.Unloaded -= ForecastToolTipOwner_Unloaded;
         if (ToolTipService.GetToolTip(owner) is ToolTip toolTip) toolTip.IsOpen = false;
-        if (ReferenceEquals(_activeForecastToolTip, ToolTipService.GetToolTip(owner))) _activeForecastToolTip = null;
+        ToolTipService.SetToolTip(owner, null);
     }
 
     private void ForecastToolTipOwner_Unloaded(object sender, RoutedEventArgs e)
@@ -1084,8 +1213,15 @@ public sealed partial class MainWindow : Window
 
     private void CloseActiveForecastToolTip()
     {
-        if (_activeForecastToolTip is not null) _activeForecastToolTip.IsOpen = false;
+        var owner = _activeForecastToolTipOwner;
+        var toolTip = _activeForecastToolTip;
+        _activeForecastToolTipOwner = null;
         _activeForecastToolTip = null;
+
+        if (owner is not null) owner.Unloaded -= ForecastToolTipOwner_Unloaded;
+        if (toolTip is not null) toolTip.IsOpen = false;
+        if (owner is not null && ReferenceEquals(ToolTipService.GetToolTip(owner), toolTip))
+            ToolTipService.SetToolTip(owner, null);
     }
     private async void Search_Click(object sender, RoutedEventArgs e) => await ViewModel.SearchCommand.ExecuteAsync(null);
     private async void SearchBox_KeyDown(object sender, KeyRoutedEventArgs e) { if (e.Key == Windows.System.VirtualKey.Enter) await ViewModel.SearchCommand.ExecuteAsync(null); }
@@ -1199,6 +1335,8 @@ public sealed partial class MainWindow : Window
         };
         settingsPanel.Children.Add(card);
 
+        settingsPanel.Children.Add(CreateSupportCard());
+
         _updateStatusText = new TextBlock
         {
             Text = "Updates are checked automatically once a day.",
@@ -1287,8 +1425,69 @@ public sealed partial class MainWindow : Window
         Grid.SetColumn(panel, 1);
         panel.Children.Add(new TextBlock { Text = "Forecast Center", FontSize = 18, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
         panel.Children.Add(new TextBlock { Text = $"Version {version} · Released {released}", Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"] });
-        panel.Children.Add(new TextBlock { Text = "A private, ad-free Windows weather dashboard.", TextWrapping = TextWrapping.Wrap, Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"] });
+        panel.Children.Add(new TextBlock { Text = "A free, ad-free Windows weather dashboard.", TextWrapping = TextWrapping.Wrap, Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"] });
         return panel;
+    }
+
+    private static FrameworkElement CreateSupportCard()
+    {
+        var icon = new TextBlock
+        {
+            Text = "☕",
+            FontFamily = new FontFamily("Segoe UI Emoji"),
+            FontSize = 25,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        var iconContainer = new Grid
+        {
+            Width = 44,
+            Height = 44,
+            CornerRadius = new CornerRadius(12),
+            Background = new SolidColorBrush(Windows.UI.Color.FromArgb(28, 242, 184, 75)),
+            Children = { icon }
+        };
+
+        var supportButton = new Button
+        {
+            Content = "Support on Ko-fi",
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Margin = new Thickness(0, 4, 0, 0)
+        };
+        supportButton.Click += async (_, _) =>
+            await Windows.System.Launcher.LaunchUriAsync(new Uri("https://ko-fi.com/wrenchware"));
+
+        var content = new StackPanel { Spacing = 6 };
+        Grid.SetColumn(content, 1);
+        content.Children.Add(new TextBlock
+        {
+            Text = "Support Forecast Center",
+            FontSize = 16,
+            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold
+        });
+        content.Children.Add(new TextBlock
+        {
+            Text = "Forecast Center is free and ad-free. If it is useful to you, an optional donation can help support continued development. Donations do not unlock features or benefits.",
+            TextWrapping = TextWrapping.Wrap,
+            Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"]
+        });
+        content.Children.Add(supportButton);
+
+        return new Border
+        {
+            Style = (Style)Application.Current.Resources["WeatherCardStyle"],
+            Padding = new Thickness(18),
+            Child = new Grid
+            {
+                ColumnSpacing = 16,
+                ColumnDefinitions =
+                {
+                    new ColumnDefinition { Width = new GridLength(44) },
+                    new ColumnDefinition()
+                },
+                Children = { iconContainer, content }
+            }
+        };
     }
 
     private void AddDownloadedDataSettings(StackPanel settingsPanel)

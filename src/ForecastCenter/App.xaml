@@ -11,6 +11,7 @@
                     <Color x:Key="HeroToneOverlayColor">#00000000</Color>
                     <Color x:Key="TideCardBackgroundColor">#EAF5F8</Color>
                     <Color x:Key="TideAccentColor">#147F9B</Color>
+                    <Color x:Key="ForecastPagerBackgroundColor">#F7F9FB</Color>
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Dark">
                     <Color x:Key="DashboardBaseColor">#111418</Color>
@@ -18,6 +19,7 @@
                     <Color x:Key="HeroToneOverlayColor">#24000000</Color>
                     <Color x:Key="TideCardBackgroundColor">#172229</Color>
                     <Color x:Key="TideAccentColor">#62D7F2</Color>
+                    <Color x:Key="ForecastPagerBackgroundColor">#25292E</Color>
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
             <ResourceDictionary.MergedDictionaries>
@@ -28,6 +30,7 @@
             <SolidColorBrush x:Key="HeroToneOverlayBrush" Color="{ThemeResource HeroToneOverlayColor}" />
             <SolidColorBrush x:Key="TideCardBackgroundBrush" Color="{ThemeResource TideCardBackgroundColor}" />
             <SolidColorBrush x:Key="TideAccentBrush" Color="{ThemeResource TideAccentColor}" />
+            <SolidColorBrush x:Key="ForecastPagerBackgroundBrush" Color="{ThemeResource ForecastPagerBackgroundColor}" />
             <Style x:Key="WeatherCardStyle" TargetType="Border">
                 <Setter Property="Background" Value="{ThemeResource CardBackgroundBrush}" />
                 <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
