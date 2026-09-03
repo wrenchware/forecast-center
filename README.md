@@ -97,7 +97,7 @@ The installer includes Microsoft's Evergreen WebView2 bootstrapper and invokes
 it only when the required runtime is missing.
 
 ```powershell
-$releasePath = Join-Path $PWD 'release\Forecast Center'
+$releasePath = Join-Path $PWD 'release\Forecast Center Public'
 dotnet build .\src\ForecastCenter\ForecastCenter.csproj -c Release -p:Platform=x64 -p:SelfContained=true "-p:OutDir=$releasePath"
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\CollectThirdPartyLicenses.ps1 -AssetsFile .\src\ForecastCenter\obj\project.assets.json -OutputDirectory "$releasePath\ThirdPartyLicenses"
 & "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe" .\installer\ForecastCenter.iss
