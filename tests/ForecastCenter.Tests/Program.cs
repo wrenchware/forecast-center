@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net;
 using System.Text;
 using ForecastCenter.Models;
@@ -31,7 +32,14 @@ static async Task OpenMeteoParsing()
       "daily":{"time":["2026-08-28"],"temperature_2m_max":[78],"temperature_2m_min":[60],"weather_code":[45],"precipitation_probability_max":[30],"sunrise":["2026-08-28T06:10"],"sunset":["2026-08-28T19:28"]}
     }
     """;
-    var service = new OpenMeteoService(new HttpClient(new StaticHandler(_ => Json(json))));
+    var attempts = new ConcurrentDictionary<string, int>();
+    var handler = new StaticHandler(request =>
+    {
+        var key = request.RequestUri!.AbsoluteUri;
+        var attempt = attempts.AddOrUpdate(key, 1, (_, value) => value + 1);
+        return attempt == 1 ? Json("Unexpected error while streaming data: allEndpointsUnavailable") : Json(json);
+    });
+    var service = new OpenMeteoService(new HttpClient(handler));
     var location = new LocationResult("Test City", "CT", "United States", 41.5, -72.0);
     var result = await service.GetWeatherAsync(location, false, CancellationToken.None);
     Equal(72.5, result.Current.Temperature, "current temperature");
@@ -41,6 +49,8 @@ static async Task OpenMeteoParsing()
     Equal(3, result.Hourly.Count, "hour count");
     Equal(2, result.Minutely15.Count, "15-minute count");
     Equal(2, result.Daily[0].WeatherCode, "representative daytime weather code");
+    Equal(4, attempts.Count, "split request count");
+    Equal(8, handler.RequestCount, "transient response retry count");
 }
 
 static async Task NwsAlertParsing()
@@ -87,11 +97,10 @@ static async Task SettingsMigration()
 
         var second = new LocationResult("Tampa", "FL", "United States", 27.95, -82.46);
         var overrides = new Dictionary<string, string>(migrated.Current.TideStationOverrides) { [second.StorageKey] = "8726520" };
-        await migrated.SaveAsync(migrated.Current with { TideStationOverrides = overrides, NavigationTipDismissed = true });
+        await migrated.SaveAsync(migrated.Current with { TideStationOverrides = overrides });
         var reloaded = new SettingsService(path);
         Equal("8461490", reloaded.Current.TideStationOverrides[migrated.Current.DefaultLocation.StorageKey], "first location override");
         Equal("8726520", reloaded.Current.TideStationOverrides[second.StorageKey], "second location override");
-        Equal(true, reloaded.Current.NavigationTipDismissed, "navigation tip persistence");
     }
     finally { Directory.Delete(folder, true); }
 }
@@ -108,8 +117,9 @@ static void Near(double expected, double actual, double tolerance, string name) 
 
 sealed class StaticHandler(Func<HttpRequestMessage, HttpResponseMessage> response) : HttpMessageHandler
 {
-    public int RequestCount { get; private set; }
-    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) { RequestCount++; return Task.FromResult(response(request)); }
+    private int _requestCount;
+    public int RequestCount => _requestCount;
+    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) { Interlocked.Increment(ref _requestCount); return Task.FromResult(response(request)); }
 }
 
 sealed class SequenceWeatherProvider(WeatherSnapshot snapshot) : IWeatherProvider

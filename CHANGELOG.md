@@ -2,6 +2,25 @@
 
 Notable user-facing changes to Forecast Center are recorded here. GitHub Releases contain matching downloadable installer notes.
 
+## 1.0.2 - 2026-09-03
+
+### Added
+
+- Added illustrated weather artwork across current conditions, hourly forecasts, and the 10-day forecast.
+- Added distinct day, night, full-moon, fog, snow, heavy-snow, and wintry-mix artwork where conditions support it.
+
+### Improved
+
+- Made weather refreshes more resilient by requesting smaller forecast groups in parallel and retrying transient provider failures once.
+- Refined Settings with a rounded page surface, balanced spacing, simplified tab content, and more precise hover alignment.
+- Made dynamically generated Settings and forecast-detail text follow light and dark theme changes reliably.
+- Improved cached-forecast messaging so a temporary provider failure is not incorrectly reported as a lost internet connection.
+
+### Fixed
+
+- Reduced failed or incomplete refreshes caused by temporary Open-Meteo streaming and endpoint errors.
+- Fixed unreadable secondary text in Sources & data and other dynamically created content after changing themes.
+
 ## 1.0.1 - 2026-09-01
 
 ### Added

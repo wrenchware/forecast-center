@@ -24,6 +24,10 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private string temperature = "--°";
     [ObservableProperty] private string condition = "Loading weather…";
     [ObservableProperty] private string conditionGlyph = "·";
+    [ObservableProperty] private Microsoft.UI.Xaml.Visibility conditionGlyphVisibility = Microsoft.UI.Xaml.Visibility.Visible;
+    [ObservableProperty] private Microsoft.UI.Xaml.Visibility heroArtworkVisibility = Microsoft.UI.Xaml.Visibility.Collapsed;
+    [ObservableProperty] private Microsoft.UI.Xaml.Media.Imaging.SvgImageSource? heroArtwork;
+    [ObservableProperty] private Microsoft.UI.Xaml.Media.Imaging.SvgImageSource? heroArtworkUnderlay;
     [ObservableProperty] private string feelsLike = "Feels like --°";
     [ObservableProperty] private string highLow = "H: --°  L: --°";
     [ObservableProperty] private string forecastSummary = "Forecast details will appear after the first update.";
@@ -167,7 +171,7 @@ public partial class MainViewModel : ObservableObject
                 else { _latestTideSnapshot = null; TidePredictions.Clear(); TideStationName = "No nearby tide station"; }
             }
             catch { TideVisibility = Microsoft.UI.Xaml.Visibility.Collapsed; TideStationName = "Tide predictions unavailable"; TidePredictions.Clear(); }
-            if (_weather.LastResultWasCached) Status = "You’re offline. Showing the most recently saved forecast.";
+            if (_weather.LastResultWasCached) Status = "Weather service temporarily unavailable. Showing the most recently saved forecast.";
             try
             {
                 Replace(Alerts, await _alerts.GetActiveAsync(CurrentLocation, _loadCts.Token));
@@ -398,6 +402,10 @@ public partial class MainViewModel : ObservableObject
         Temperature = $"{s.Current.Temperature:0}{degree}";
         Condition = WeatherCode.Description(s.Current.WeatherCode);
         ConditionGlyph = WeatherCode.Glyph(s.Current.WeatherCode, s.Current.IsDay);
+        HeroArtwork = ForecastArtwork(s.Current.WeatherCode, s.Current.IsDay, time: s.Current.UpdatedAt);
+        HeroArtworkUnderlay = ForecastArtwork(s.Current.WeatherCode, s.Current.IsDay, underlay: true, time: s.Current.UpdatedAt);
+        HeroArtworkVisibility = HeroArtwork is null ? Microsoft.UI.Xaml.Visibility.Collapsed : Microsoft.UI.Xaml.Visibility.Visible;
+        ConditionGlyphVisibility = HeroArtwork is null ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
         FeelsLike = $"Feels like {s.Current.FeelsLike:0}{degree}";
         HighLow = s.Daily.Count > 0 ? $"H: {s.Daily[0].High:0}{degree}   L: {s.Daily[0].Low:0}{degree}" : "";
         var fallbackSummary = s.Daily.Count > 0
@@ -426,13 +434,14 @@ public partial class MainViewModel : ObservableObject
             x.Temperature <= (Metric ? 3 : 37));
         Replace(HourlyTrend, s.Hourly.Select(x => new HourlyTrendPoint(x.Time, x.DewPoint ?? x.Temperature, x.PrecipitationProbability, x.WeatherCode)));
         var forecastDate = s.Current.UpdatedAt.Date;
-        Replace(Hours, s.Hourly.Select(x => new HourlyItem(x.Time, x.Time.ToString(x.Time.Date == forecastDate ? "h tt" : "ddd h tt"), WeatherCode.Glyph(x.WeatherCode), WeatherCode.Description(x.WeatherCode), $"{x.Temperature:0}{degree}", $"{x.PrecipitationProbability}%", x.DewPoint is double dewPoint ? $"{dewPoint:0}{degree}" : "—", ForecastTint(x.WeatherCode, x.Time.Hour is >= 7 and < 19))));
+        Replace(Hours, s.Hourly.Select(x => new HourlyItem(x.Time, x.Time.ToString(x.Time.Date == forecastDate ? "h tt" : "ddd h tt"), WeatherCode.Glyph(x.WeatherCode), WeatherCode.Description(x.WeatherCode), $"{x.Temperature:0}{degree}", $"{x.PrecipitationProbability}%", x.DewPoint is double dewPoint ? $"{dewPoint:0}{degree}" : "—", ForecastTint(x.WeatherCode, x.Time.Hour is >= 7 and < 19), ForecastArtwork(x.WeatherCode, x.Time.Hour is >= 7 and < 19, time: x.Time), ForecastArtwork(x.WeatherCode, x.Time.Hour is >= 7 and < 19, underlay: true, time: x.Time))));
         Replace(Days, s.Daily.Select((x, i) => new DailyItem(
             i == 0 ? "Today" : x.Date.ToString("ddd"), x.Date.ToString("dddd, MMMM d"),
             WeatherCode.Glyph(x.WeatherCode), WeatherCode.Description(x.WeatherCode),
             $"{x.High:0}{degree}", $"{x.Low:0}{degree}", $"{x.PrecipitationProbability}%", ForecastTint(x.WeatherCode, true),
             x.Sunrise.ToString("t"), x.Sunset.ToString("t"),
-            narratives.TryGetValue(DateOnly.FromDateTime(x.Date), out var narrative) ? narrative : $"{WeatherCode.Description(x.WeatherCode)} with a high near {x.High:0}{degree} and a low near {x.Low:0}{degree}. The chance of precipitation is {x.PrecipitationProbability}%.")));
+            narratives.TryGetValue(DateOnly.FromDateTime(x.Date), out var narrative) ? narrative : $"{WeatherCode.Description(x.WeatherCode)} with a high near {x.High:0}{degree} and a low near {x.Low:0}{degree}. The chance of precipitation is {x.PrecipitationProbability}%.",
+            ForecastArtwork(x.WeatherCode, true, time: x.Date), ForecastArtwork(x.WeatherCode, true, underlay: true, time: x.Date))));
     }
 
     private void ApplyMoonPhase()
@@ -658,6 +667,43 @@ public partial class MainViewModel : ObservableObject
         return Windows.UI.Color.FromArgb(25, (byte)r, (byte)g, (byte)b);
     }
 
+    private static Microsoft.UI.Xaml.Media.Imaging.SvgImageSource? ForecastArtwork(int code, bool isDay, bool underlay = false, DateTime? time = null)
+    {
+        var nearFullMoon = !isDay && IsNearFullMoon(time ?? DateTime.Now);
+        var fileName = code switch
+        {
+            0 => isDay ? "01_clear_day.svg" : nearFullMoon ? "13_full_moon.svg" : "11_clear_night.svg",
+            1 => isDay ? "03_mostly_sunny.svg" : nearFullMoon ? "14_moon_cloud.svg" : "12_partly_cloudy_night.svg",
+            2 => isDay ? "04_partly_cloudy_day.svg" : nearFullMoon ? "14_moon_cloud.svg" : "12_partly_cloudy_night.svg",
+            3 => isDay ? "05_mostly_cloudy_day.svg" : "15_cloudy_night.svg",
+            45 or 48 => "18_fog.svg",
+            51 or 53 or 55 => isDay ? "08_rain_day.svg" : "09_rain.svg",
+            >= 61 and <= 65 or >= 80 and <= 82 => isDay ? "08_rain_day.svg" : "09_rain.svg",
+            56 or 57 or 66 or 67 => "19_wintry_mix.svg",
+            71 => "16_snow.svg",
+            73 or 75 or 85 or 86 => "17_heavy_snow.svg",
+            77 => "19_wintry_mix.svg",
+            95 => isDay ? "06_thunderstorm_day.svg" : "07_thunderstorm.svg",
+            96 or 99 => "10_thunderstorm_rain.svg",
+            _ => null
+        };
+
+        return fileName is null
+            ? null
+            : new Microsoft.UI.Xaml.Media.Imaging.SvgImageSource
+            {
+                UriSource = new Uri($"ms-appx:///Assets/weather/{(underlay ? "condition-underlays" : "conditions")}/{fileName}")
+            };
+    }
+
+    private static bool IsNearFullMoon(DateTime time)
+    {
+        const double lunarCycleDays = 29.530588853;
+        var epoch = new DateTime(2000, 1, 6, 18, 14, 0);
+        var phase = (((time - epoch).TotalDays / lunarCycleDays) % 1 + 1) % 1;
+        return Math.Abs(phase - .5) <= 2.25 / lunarCycleDays;
+    }
+
     private static void Replace<T>(ObservableCollection<T> target, IEnumerable<T> values) { target.Clear(); foreach (var item in values) target.Add(item); }
     private static bool SameLocation(LocationResult a, LocationResult b) => Math.Abs(a.Latitude - b.Latitude) < .001 && Math.Abs(a.Longitude - b.Longitude) < .001;
     private (double Factor, string Label) WindConversion()
@@ -677,7 +723,11 @@ public partial class MainViewModel : ObservableObject
     private static string Friendly(Exception ex) => ex is HttpRequestException { StatusCode: HttpStatusCode.TooManyRequests } ? "The provider is rate-limiting requests; try again shortly." : ex.Message;
 }
 
-public sealed record HourlyItem(DateTime Timestamp, string Time, string Glyph, string Condition, string Temperature, string Precipitation, string DewPoint, Windows.UI.Color TintColor);
+public sealed record HourlyItem(DateTime Timestamp, string Time, string Glyph, string Condition, string Temperature, string Precipitation, string DewPoint, Windows.UI.Color TintColor, Microsoft.UI.Xaml.Media.Imaging.SvgImageSource? Artwork, Microsoft.UI.Xaml.Media.Imaging.SvgImageSource? ArtworkUnderlay)
+{
+    public Microsoft.UI.Xaml.Visibility StandardGlyphVisibility => Artwork is null ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
+    public Microsoft.UI.Xaml.Visibility ArtworkVisibility => Artwork is null ? Microsoft.UI.Xaml.Visibility.Collapsed : Microsoft.UI.Xaml.Visibility.Visible;
+}
 public sealed record HourlyTrendPoint(DateTime Time, double DewPoint, int PrecipitationProbability, int WeatherCode);
 public sealed record NextHourPrecipitationItem(string Time, string Probability, double CompactBarHeight, Windows.UI.Color Color);
 public sealed record TideDisplayItem(string Type, string Time, string Height, string Glyph);
@@ -692,4 +742,8 @@ public sealed partial class TideStationChoice : ObservableObject
         this.displayName = displayName;
     }
 }
-public sealed record DailyItem(string Day, string FullDate, string Glyph, string Condition, string High, string Low, string Precipitation, Windows.UI.Color TintColor, string Sunrise, string Sunset, string Summary);
+public sealed record DailyItem(string Day, string FullDate, string Glyph, string Condition, string High, string Low, string Precipitation, Windows.UI.Color TintColor, string Sunrise, string Sunset, string Summary, Microsoft.UI.Xaml.Media.Imaging.SvgImageSource? Artwork, Microsoft.UI.Xaml.Media.Imaging.SvgImageSource? ArtworkUnderlay)
+{
+    public Microsoft.UI.Xaml.Visibility StandardGlyphVisibility => Artwork is null ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
+    public Microsoft.UI.Xaml.Visibility ArtworkVisibility => Artwork is null ? Microsoft.UI.Xaml.Visibility.Collapsed : Microsoft.UI.Xaml.Visibility.Visible;
+}

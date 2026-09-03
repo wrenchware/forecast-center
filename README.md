@@ -8,7 +8,7 @@ It is written in C# with WinUI 3. The radar uses Leaflet inside WebView2.
 
 ## Features
 
-- Current conditions, hourly forecast, and 10-day forecast
+- Current conditions, hourly forecast, and 10-day forecast with illustrated condition artwork
 - Animated current radar and NOAA HRRR future radar through roughly six hours
 - Severe-weather alerts from the National Weather Service
 - Saved locations and per-location tide settings

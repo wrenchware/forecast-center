@@ -117,12 +117,18 @@ public sealed class OpenMeteoService(HttpClient http) : IWeatherProvider, ILocat
     {
         var c = CultureInfo.InvariantCulture;
         var units = metric ? "&temperature_unit=celsius&wind_speed_unit=kmh&precipitation_unit=mm" : "&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch";
-        var fields = "current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,weather_code,surface_pressure,wind_speed_10m,wind_direction_10m,wind_gusts_10m" +
-                     "&hourly=temperature_2m,apparent_temperature,relative_humidity_2m,dew_point_2m,precipitation_probability,weather_code,visibility,surface_pressure,uv_index,wind_speed_10m,wind_direction_10m,wind_gusts_10m" +
-                     "&minutely_15=precipitation,precipitation_probability,rain,snowfall,weather_code" +
-                     "&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,precipitation_probability_max";
-        var url = $"https://api.open-meteo.com/v1/forecast?latitude={location.Latitude.ToString(c)}&longitude={location.Longitude.ToString(c)}&{fields}&forecast_days=10&forecast_minutely_15=8&timezone=auto{units}";
-        var d = await http.GetFromJsonAsync<ForecastResponse>(url, ct) ?? throw new InvalidOperationException("Open-Meteo returned no weather data.");
+        var baseUrl = $"https://api.open-meteo.com/v1/forecast?latitude={location.Latitude.ToString(c)}&longitude={location.Longitude.ToString(c)}&timezone=auto{units}";
+        var currentTask = GetWithRetryAsync<CurrentResponse>($"{baseUrl}&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,weather_code,surface_pressure,wind_speed_10m,wind_direction_10m,wind_gusts_10m", ct);
+        var hourlyTask = GetWithRetryAsync<HourlyResponse>($"{baseUrl}&hourly=temperature_2m,dew_point_2m,precipitation_probability,weather_code,visibility,surface_pressure,uv_index&forecast_days=10", ct);
+        var minutelyTask = GetWithRetryAsync<MinutelyResponse>($"{baseUrl}&minutely_15=precipitation,precipitation_probability,rain,snowfall,weather_code&forecast_minutely_15=8", ct);
+        var dailyTask = GetWithRetryAsync<DailyResponse>($"{baseUrl}&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,precipitation_probability_max&forecast_days=10", ct);
+
+        await Task.WhenAll(currentTask, hourlyTask, minutelyTask, dailyTask);
+        var d = new ForecastResponse(
+            (await currentTask).Current,
+            (await hourlyTask).Hourly,
+            (await minutelyTask).Minutely15,
+            (await dailyTask).Daily);
         var nowIndex = FindNearest(d.Hourly.Time, d.Current.Time);
         var current = new CurrentWeather(d.Current.Temperature, d.Current.FeelsLike, d.Current.Humidity,
             CalculateDewPoint(d.Current.Temperature, d.Current.Humidity, metric), d.Current.WindSpeed, d.Current.WindDirection, d.Current.WindGust,
@@ -139,6 +145,22 @@ public sealed class OpenMeteoService(HttpClient http) : IWeatherProvider, ILocat
             return new DailyWeather(date, At(d.Daily.High, i), At(d.Daily.Low, i), representativeCode, At(d.Daily.Precipitation, i), DateTime.Parse(d.Daily.Sunrise[i]), DateTime.Parse(d.Daily.Sunset[i]));
         }).ToList();
         return new(location, current, hours, days) { Minutely15 = minutes };
+    }
+
+    private async Task<T> GetWithRetryAsync<T>(string url, CancellationToken ct)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                return await http.GetFromJsonAsync<T>(url, ct)
+                    ?? throw new InvalidOperationException("Open-Meteo returned no weather data.");
+            }
+            catch (Exception) when (attempt == 0 && !ct.IsCancellationRequested)
+            {
+                await Task.Delay(400, ct);
+            }
+        }
     }
 
     private static int RepresentativeDayCode(HourlyDto hourly, DateTime date, int fallback)
@@ -192,6 +214,10 @@ public sealed class OpenMeteoService(HttpClient http) : IWeatherProvider, ILocat
     private static double? AtNullable(List<double> values, int i) => i >= 0 && i < values.Count ? values[i] : null;
 
     private sealed record GeoResponse([property: JsonPropertyName("results")] List<GeoItem>? Results);
+    private sealed record CurrentResponse([property: JsonPropertyName("current")] CurrentDto Current);
+    private sealed record HourlyResponse([property: JsonPropertyName("hourly")] HourlyDto Hourly);
+    private sealed record MinutelyResponse([property: JsonPropertyName("minutely_15")] MinutelyDto Minutely15);
+    private sealed record DailyResponse([property: JsonPropertyName("daily")] DailyDto Daily);
     private sealed record NearbyForecastDto([property: JsonPropertyName("current")] NearbyCurrentDto Current);
     private sealed record NearbyCurrentDto([property: JsonPropertyName("temperature_2m")] double Temperature);
     private sealed record CityCandidate(LocationResult Location, long Population);

@@ -1076,7 +1076,7 @@ public sealed partial class MainWindow : Window
         details.Children.Add(new TextBlock { Text = day.Summary, TextWrapping = TextWrapping.Wrap });
         details.Children.Add(new TextBlock { Text = $"High {day.High}    Low {day.Low}" });
         details.Children.Add(new TextBlock { Text = $"Precipitation chance: {day.Precipitation}" });
-        details.Children.Add(new TextBlock { Text = $"Sunrise {day.Sunrise}    Sunset {day.Sunset}", Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"] });
+        details.Children.Add(new TextBlock { Text = $"Sunrise {day.Sunrise}    Sunset {day.Sunset}", Opacity = 0.72 });
         await new ContentDialog { XamlRoot = RootGrid.XamlRoot, Title = day.FullDate, Content = details, CloseButtonText = "Close", DefaultButton = ContentDialogButton.Close }.ShowAsync();
     }
 
@@ -1090,8 +1090,8 @@ public sealed partial class MainWindow : Window
         content.Children.Add(new TextBlock { Text = day.FullDate, FontSize = 13, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
         content.Children.Add(new TextBlock { Text = $"{day.Glyph}  {day.Condition}", FontSize = 20, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
         content.Children.Add(new TextBlock { Text = day.Summary, TextWrapping = TextWrapping.Wrap, LineHeight = 20 });
-        content.Children.Add(new TextBlock { Text = $"High {day.High}    Low {day.Low}    Precipitation {day.Precipitation}", TextWrapping = TextWrapping.Wrap, Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"] });
-        content.Children.Add(new TextBlock { Text = $"Sunrise {day.Sunrise}    Sunset {day.Sunset}", TextWrapping = TextWrapping.Wrap, Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"] });
+        content.Children.Add(new TextBlock { Text = $"High {day.High}    Low {day.Low}    Precipitation {day.Precipitation}", TextWrapping = TextWrapping.Wrap });
+        content.Children.Add(new TextBlock { Text = $"Sunrise {day.Sunrise}    Sunset {day.Sunset}", TextWrapping = TextWrapping.Wrap });
         var palette = ForecastToolTipPalette();
         foreach (var textBlock in content.Children.OfType<TextBlock>()) textBlock.Foreground = palette.Foreground;
 
@@ -1127,7 +1127,7 @@ public sealed partial class MainWindow : Window
         content.Children.Add(new TextBlock { Text = hour.Time, FontSize = 13, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
         content.Children.Add(new TextBlock { Text = $"{hour.Glyph}  {hour.Condition}", FontSize = 18, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
         content.Children.Add(new TextBlock { Text = $"Temperature {hour.Temperature}    Dew point {hour.DewPoint}", TextWrapping = TextWrapping.Wrap });
-        content.Children.Add(new TextBlock { Text = $"Precipitation chance: {hour.Precipitation}", TextWrapping = TextWrapping.Wrap, Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"] });
+        content.Children.Add(new TextBlock { Text = $"Precipitation chance: {hour.Precipitation}", TextWrapping = TextWrapping.Wrap });
         var palette = ForecastToolTipPalette();
         foreach (var textBlock in content.Children.OfType<TextBlock>()) textBlock.Foreground = palette.Foreground;
 
@@ -1341,7 +1341,7 @@ public sealed partial class MainWindow : Window
         {
             Text = "Updates are checked automatically once a day.",
             TextWrapping = TextWrapping.Wrap,
-            Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"]
+            Opacity = 0.72
         };
         _checkForUpdatesButton = new Button { Content = "Check for updates", HorizontalAlignment = HorizontalAlignment.Left };
         _checkForUpdatesButton.Click += async (_, _) => await CheckForUpdatesAsync(force: true, showCurrentStatus: true);
@@ -1424,8 +1424,8 @@ public sealed partial class MainWindow : Window
         var panel = new StackPanel { Spacing = 5 };
         Grid.SetColumn(panel, 1);
         panel.Children.Add(new TextBlock { Text = "Forecast Center", FontSize = 18, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
-        panel.Children.Add(new TextBlock { Text = $"Version {version} · Released {released}", Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"] });
-        panel.Children.Add(new TextBlock { Text = "A free, ad-free Windows weather dashboard.", TextWrapping = TextWrapping.Wrap, Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"] });
+        panel.Children.Add(new TextBlock { Text = $"Version {version} · Released {released}", Opacity = 0.72 });
+        panel.Children.Add(new TextBlock { Text = "A free, ad-free Windows weather dashboard.", TextWrapping = TextWrapping.Wrap, Opacity = 0.72 });
         return panel;
     }
 
@@ -1469,7 +1469,7 @@ public sealed partial class MainWindow : Window
         {
             Text = "Forecast Center is free and ad-free. If it is useful to you, an optional donation can help support continued development. Donations do not unlock features or benefits.",
             TextWrapping = TextWrapping.Wrap,
-            Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"]
+            Opacity = 0.72
         });
         content.Children.Add(supportButton);
 
@@ -1493,9 +1493,9 @@ public sealed partial class MainWindow : Window
     private void AddDownloadedDataSettings(StackPanel settingsPanel)
     {
         _downloadedDataSettingsSection = DownloadedDataCard;
-        _weatherCacheStatusText = new TextBlock { TextWrapping = TextWrapping.Wrap, Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"] };
-        _radarCacheStatusText = new TextBlock { TextWrapping = TextWrapping.Wrap, Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"] };
-        _tideCacheStatusText = new TextBlock { TextWrapping = TextWrapping.Wrap, Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"] };
+        _weatherCacheStatusText = new TextBlock { TextWrapping = TextWrapping.Wrap, Opacity = 0.72 };
+        _radarCacheStatusText = new TextBlock { TextWrapping = TextWrapping.Wrap, Opacity = 0.72 };
+        _tideCacheStatusText = new TextBlock { TextWrapping = TextWrapping.Wrap, Opacity = 0.72 };
         var refreshTides = new Button { Content = "Refresh NOAA station list", HorizontalAlignment = HorizontalAlignment.Left };
         refreshTides.Click += RefreshTideCatalog_Click;
         settingsPanel.Children.Add(CreateDownloadedDataRow("WEATHER & ENVIRONMENT", _weatherCacheStatusText));
