@@ -6,13 +6,22 @@ namespace ForecastCenter.Services;
 
 public sealed class WindowsLocationService
 {
+    // RPC_E_DISCONNECTED: on some Windows builds the consent broker fails RequestAccessAsync
+    // this way for packaged desktop apps instead of showing the location prompt.
+    private const int RpcDisconnected = unchecked((int)0x80010108);
+
     public async Task<LocationResult?> GetCurrentLocationAsync(CancellationToken cancellationToken = default)
     {
-        var access = await Geolocator.RequestAccessAsync();
-        if (access != GeolocationAccessStatus.Allowed)
-            throw new UnauthorizedAccessException($"Windows location access returned {access}.");
+        GeolocationAccessStatus access;
+        try { access = await Geolocator.RequestAccessAsync(); }
+        catch (Exception ex) when (ex.HResult == RpcDisconnected) { access = GeolocationAccessStatus.Unspecified; }
+        if (access == GeolocationAccessStatus.Denied) throw new LocationPermissionException();
+
+        // Without a clear answer from the broker, ask anyway: access may already be on in Settings.
         var locator = new Geolocator { DesiredAccuracyInMeters = 1000, MovementThreshold = 1000 };
-        var position = await locator.GetGeopositionAsync(TimeSpan.FromMinutes(10), TimeSpan.FromSeconds(15)).AsTask(cancellationToken);
+        Geoposition position;
+        try { position = await locator.GetGeopositionAsync(TimeSpan.FromMinutes(10), TimeSpan.FromSeconds(15)).AsTask(cancellationToken); }
+        catch (UnauthorizedAccessException) { throw new LocationPermissionException(); }
         var point = position.Coordinate.Point.Position;
         var address = position.CivicAddress;
         var city = address?.City ?? "";
@@ -38,3 +47,6 @@ public sealed class WindowsLocationService
         catch { return ("", "", ""); }
     }
 }
+
+public sealed class LocationPermissionException() : UnauthorizedAccessException(
+    "Forecast Center doesn't have permission to use your location. Turn it on in Windows location settings, then choose Automatic location again.");

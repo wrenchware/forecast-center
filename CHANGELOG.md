@@ -2,6 +2,12 @@
 
 Notable user-facing changes to Forecast Center are recorded here. GitHub Releases contain matching downloadable installer notes.
 
+## 1.0.4 - 2026-10-22
+
+### Fixed
+
+- Fixed "Automatic location is unavailable: The object invoked has disconnected from its clients" in the Microsoft Store version when Windows does not show its location permission prompt. Forecast Center now explains that location permission is off and offers an Open location settings button.
+
 ## 1.0.3 - 2026-10-21
 
 ### Improved

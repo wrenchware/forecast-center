@@ -36,7 +36,7 @@
                                 <Button x:Name="DefaultLocationButton" Height="40" Padding="14,0" Click="SetDefaultLocation_Click" ToolTipService.ToolTip="Use this location when Forecast Center starts"><TextBlock Text="Make default"/></Button>
                             </StackPanel>
                         </Grid>
-                        <InfoBar Grid.Row="1" Margin="0,12,0,0" CornerRadius="12" IsOpen="{x:Bind ViewModel.StatusVisible, Mode=OneWay}" Severity="Warning" Message="{x:Bind ViewModel.Status, Mode=OneWay}" />
+                        <InfoBar Grid.Row="1" Margin="0,12,0,0" CornerRadius="12" IsOpen="{x:Bind ViewModel.StatusVisible, Mode=OneWay}" Severity="Warning" Message="{x:Bind ViewModel.Status, Mode=OneWay}"><InfoBar.ActionButton><Button Content="Open location settings" Click="OpenLocationSettings_Click" Visibility="{x:Bind ViewModel.LocationSettingsActionVisible, Mode=OneWay}"/></InfoBar.ActionButton></InfoBar>
                         <InfoBar Grid.Row="2" Margin="0,12,0,0" CornerRadius="12" IsOpen="{x:Bind ViewModel.HasAlerts, Mode=OneWay}" Severity="Error" Title="Active weather alert" Message="{x:Bind ViewModel.AlertHeadline, Mode=OneWay}" Tapped="OpenAlerts_Tapped" ToolTipService.ToolTip="Open active alerts"><InfoBar.ActionButton><Button Content="View details" Click="OpenAlerts_Click"/></InfoBar.ActionButton></InfoBar>
                         <Grid x:Name="CommandCenterGrid" Grid.Row="5" Margin="0,16,0,0" ColumnSpacing="10" RowSpacing="14">
                             <Grid.ColumnDefinitions><ColumnDefinition x:Name="CommandColumn1"/><ColumnDefinition x:Name="CommandColumn2"/><ColumnDefinition x:Name="CommandColumn3"/></Grid.ColumnDefinitions>

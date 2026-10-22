@@ -712,6 +712,9 @@ public sealed partial class MainWindow : Window
         }
     }
     private void OpenAlerts_Click(object sender, RoutedEventArgs e) => ShowAlertsPage();
+
+    private async void OpenLocationSettings_Click(object sender, RoutedEventArgs e) =>
+        await Windows.System.Launcher.LaunchUriAsync(new Uri("ms-settings:privacy-location"));
     private void OpenAlerts_Tapped(object sender, TappedRoutedEventArgs e)
     {
         e.Handled = true;
@@ -835,7 +838,8 @@ public sealed partial class MainWindow : Window
             catch (Exception ex)
             {
                 await ViewModel.SetAutomaticLocationAsync(false);
-                ViewModel.Status = $"Automatic location is unavailable: {ex.Message}";
+                ViewModel.Status = ex is LocationPermissionException ? ex.Message : $"Automatic location is unavailable: {ex.Message}";
+                ViewModel.LocationSettingsActionVisible = ex is LocationPermissionException;
                 RefreshLocationPicker();
             }
             return;

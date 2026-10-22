@@ -39,6 +39,7 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private Windows.UI.Color dashboardGlowColor = Windows.UI.Color.FromArgb(38, 36, 92, 145);
     [ObservableProperty] private string updated = "Not updated yet";
     [ObservableProperty] private string status = "";
+    [ObservableProperty] private bool locationSettingsActionVisible;
     [ObservableProperty] private string humidity = "--";
     [ObservableProperty] private string dewPoint = "--";
     [ObservableProperty] private string wind = "--";
@@ -125,7 +126,11 @@ public partial class MainViewModel : ObservableObject
     public bool IsCurrentLocationDefault => SameLocation(CurrentLocation, _settings.Current.DefaultLocation);
     public string TemperatureUnit => Metric ? "°C" : "°F";
 
-    partial void OnStatusChanged(string value) => OnPropertyChanged(nameof(StatusVisible));
+    partial void OnStatusChanged(string value)
+    {
+        OnPropertyChanged(nameof(StatusVisible));
+        LocationSettingsActionVisible = false;
+    }
 
     public MainViewModel()
     {

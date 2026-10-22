@@ -17,7 +17,7 @@
   <Identity
     Name="Wrenchware.ForecastCenter"
     Publisher="CN=2FF27026-D288-4721-AF75-758FA73DF3A2"
-    Version="1.0.3.0" />
+    Version="1.0.4.0" />
 
   <Properties>
     <DisplayName>Forecast Center</DisplayName>
