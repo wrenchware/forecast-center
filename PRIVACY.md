@@ -37,6 +37,11 @@ shared by the user. Uninstalling the app may leave this folder in place so an
 upgrade or reinstall can retain preferences. It can be deleted manually after
 Forecast Center is closed.
 
+When Forecast Center is installed from the Microsoft Store, Windows keeps this
+data in the app's own package storage and removes it when the app is uninstalled.
+The Store version is updated by the Microsoft Store and does not check GitHub for
+updates.
+
 ## Changes
 
 Provider behavior and this notice may change as features evolve. Material

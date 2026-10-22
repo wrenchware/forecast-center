@@ -404,6 +404,8 @@ public sealed partial class MainWindow : Window
 
     private async Task CheckForUpdatesAfterLaunchAsync()
     {
+        // The Microsoft Store updates packaged installs itself.
+        if (AppIdentity.IsPackaged) return;
         // Let the launch transition and first data settle before a possible dialog.
         await Task.Delay(TimeSpan.FromSeconds(4));
         await CheckForUpdatesAsync(force: false, showCurrentStatus: false);
@@ -1374,6 +1376,7 @@ public sealed partial class MainWindow : Window
         _startWithWindowsCheckBox = new CheckBox { Content = "Start Forecast Center with Windows", IsChecked = ViewModel.StartWithWindows };
         _startWithWindowsCheckBox.Checked += StartWithWindowsCheckBox_Changed;
         _startWithWindowsCheckBox.Unchecked += StartWithWindowsCheckBox_Changed;
+        _ = SyncPackagedStartupCheckBoxAsync();
         AppBehaviorSettingsHost.Children.Add(_refreshFrequencyPicker);
         AppBehaviorSettingsHost.Children.Add(_startWithWindowsCheckBox);
         AppBehaviorSettingsHost.Children.Add(_minimizeToTrayCheckBox);
@@ -1449,6 +1452,10 @@ public sealed partial class MainWindow : Window
         settingsPanel.Children.Add(card);
 
         settingsPanel.Children.Add(CreateSupportCard());
+
+        // Store installs are updated by the Microsoft Store, which does not allow
+        // apps to direct users to download updates elsewhere.
+        if (AppIdentity.IsPackaged) return;
 
         _updateStatusText = new TextBlock
         {
@@ -1699,8 +1706,53 @@ public sealed partial class MainWindow : Window
     private async void StartWithWindowsCheckBox_Changed(object sender, RoutedEventArgs e)
     {
         if (!_initialized || _startWithWindowsCheckBox?.IsChecked is not bool enabled) return;
-        if (!SetStartupRegistration(enabled)) { _startWithWindowsCheckBox.IsChecked = false; ViewModel.Status = "Forecast Center could not update the Windows startup setting."; return; }
+        var applied = AppIdentity.IsPackaged ? await SetPackagedStartupAsync(enabled) : SetStartupRegistration(enabled);
+        if (!applied)
+        {
+            _startWithWindowsCheckBox.IsChecked = false;
+            ViewModel.Status = AppIdentity.IsPackaged
+                ? "Windows has startup turned off for Forecast Center. Turn it on in Settings > Apps > Startup."
+                : "Forecast Center could not update the Windows startup setting.";
+            return;
+        }
         await ViewModel.SetStartWithWindowsAsync(enabled);
+    }
+
+    /// <summary>
+    /// Store (MSIX) installs register for startup through the manifest's StartupTask; the
+    /// Run registry key is virtualized for packaged apps and would silently do nothing.
+    /// </summary>
+    private static async Task<bool> SetPackagedStartupAsync(bool enabled)
+    {
+        try
+        {
+            var task = await Windows.ApplicationModel.StartupTask.GetAsync(AppIdentity.StartupTaskId);
+            if (!enabled)
+            {
+                task.Disable();
+                return true;
+            }
+            var state = await task.RequestEnableAsync();
+            return state is Windows.ApplicationModel.StartupTaskState.Enabled or Windows.ApplicationModel.StartupTaskState.EnabledByPolicy;
+        }
+        catch { return false; }
+    }
+
+    /// <summary>Reflects changes the user made in Windows Settings > Apps > Startup.</summary>
+    private async Task SyncPackagedStartupCheckBoxAsync()
+    {
+        if (!AppIdentity.IsPackaged || _startWithWindowsCheckBox is null) return;
+        try
+        {
+            var task = await Windows.ApplicationModel.StartupTask.GetAsync(AppIdentity.StartupTaskId);
+            var enabled = task.State is Windows.ApplicationModel.StartupTaskState.Enabled or Windows.ApplicationModel.StartupTaskState.EnabledByPolicy;
+            _startWithWindowsCheckBox.Checked -= StartWithWindowsCheckBox_Changed;
+            _startWithWindowsCheckBox.Unchecked -= StartWithWindowsCheckBox_Changed;
+            _startWithWindowsCheckBox.IsChecked = enabled;
+            _startWithWindowsCheckBox.Checked += StartWithWindowsCheckBox_Changed;
+            _startWithWindowsCheckBox.Unchecked += StartWithWindowsCheckBox_Changed;
+        }
+        catch { }
     }
 
     private static bool SetStartupRegistration(bool enabled)

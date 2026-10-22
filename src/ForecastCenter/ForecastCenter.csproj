@@ -45,9 +45,6 @@
   </ItemGroup>
   <ItemGroup>
     <Content Include="Assets\radar.html" CopyToOutputDirectory="PreserveNewest" />
-    <!-- Leaflet 1.9.4, MapLibre GL 5.24.0 and maplibre-gl-leaflet 0.1.3, bundled so the
-         radar paints without fetching ~1 MB of script from a CDN on every launch. -->
-    <Content Include="Assets\lib\*" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\forecast-center.ico" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\forecast-center-icon.png" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\cities15000.zip" CopyToOutputDirectory="PreserveNewest" />
@@ -58,6 +55,29 @@
     <Content Include="..\..\LICENSE" Link="LICENSE" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\PRIVACY.md" Link="PRIVACY.md" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\THIRD_PARTY_NOTICES.md" Link="THIRD_PARTY_NOTICES.md" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <!-- Microsoft Store build: `-p:StoreBuild=true` produces an MSIX upload package that
+       Partner Center signs and distributes. The default (GitHub installer) build is
+       unchanged. See docs/microsoft-store.md. -->
+  <PropertyGroup Condition="'$(StoreBuild)' == 'true'">
+    <EnableMsixTooling>true</EnableMsixTooling>
+    <WindowsPackageType>MSIX</WindowsPackageType>
+    <GenerateAppxPackageOnBuild>true</GenerateAppxPackageOnBuild>
+    <UapAppxPackageBuildMode>StoreUpload</UapAppxPackageBuildMode>
+    <AppxBundle>Never</AppxBundle>
+    <AppxPackageSigningEnabled>false</AppxPackageSigningEnabled>
+    <AppxPackageDir>$(MSBuildProjectDirectory)\..\..\release\store\</AppxPackageDir>
+    <AppxSymbolPackageEnabled>false</AppxSymbolPackageEnabled>
+    <!-- Same ReadyToRun startup gain as the GitHub release build. -->
+    <PublishReadyToRun>true</PublishReadyToRun>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(StoreBuild)' == 'true'">
+    <AppxManifest Include="Packaging\Package.appxmanifest" />
+    <Content Include="Packaging\Images\*.png" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(StoreBuild)' != 'true'">
+    <None Remove="Packaging\**" />
+    <Content Remove="Packaging\**" />
   </ItemGroup>
   <!-- Unpackaged WinUI publish omits the compiled XAML (.xbf) and resource index (.pri)
        that the build output contains; without them the app cannot load its windows. -->
