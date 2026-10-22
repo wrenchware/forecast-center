@@ -68,6 +68,8 @@
     <AppxPackageSigningEnabled>false</AppxPackageSigningEnabled>
     <AppxPackageDir>$(MSBuildProjectDirectory)\..\..\release\store\</AppxPackageDir>
     <AppxSymbolPackageEnabled>false</AppxSymbolPackageEnabled>
+    <!-- Bundle .NET so the app runs on PCs without the .NET Desktop Runtime. -->
+    <SelfContained>true</SelfContained>
     <!-- Same ReadyToRun startup gain as the GitHub release build. -->
     <PublishReadyToRun>true</PublishReadyToRun>
   </PropertyGroup>
