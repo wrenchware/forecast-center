@@ -1,12 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   Microsoft Store (MSIX) manifest. Only used by Store builds:
-    dotnet publish ... -p:StoreBuild=true   (see docs/microsoft-store.md)
+    dotnet build ... -p:StoreBuild=true   (see docs/microsoft-store.md)
 
-  Before the first Store submission, replace the three PARTNER-CENTER values below
-  with the ones shown in Partner Center > your app > Product identity:
-    Identity Name, Identity Publisher, and PublisherDisplayName.
-  The Store rejects a package whose identity does not match exactly.
+  Identity values come from Partner Center > Forecast Center (Store ID 9NCKT4BX2BM7)
+  > Product identity. The Store rejects a package whose identity does not match exactly.
 -->
 <Package
   xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
@@ -17,13 +15,13 @@
   IgnorableNamespaces="uap uap5 desktop rescap">
 
   <Identity
-    Name="PARTNER-CENTER.PackageIdentityName"
-    Publisher="CN=PARTNER-CENTER-PUBLISHER-ID"
+    Name="Wrenchware.ForecastCenter"
+    Publisher="CN=2FF27026-D288-4721-AF75-758FA73DF3A2"
     Version="1.0.3.0" />
 
   <Properties>
     <DisplayName>Forecast Center</DisplayName>
-    <PublisherDisplayName>PARTNER-CENTER-PUBLISHER-DISPLAY-NAME</PublisherDisplayName>
+    <PublisherDisplayName>Wrenchware</PublisherDisplayName>
     <Logo>Packaging\Images\StoreLogo.png</Logo>
   </Properties>
 

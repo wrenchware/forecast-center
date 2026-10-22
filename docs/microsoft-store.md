@@ -21,14 +21,11 @@ The same code runs in both builds; it detects at runtime whether it is packaged
 
 1. Register at <https://storedeveloper.microsoft.com> as an **Individual developer**
    (free). Identity verification uses a government ID and a selfie.
-2. In Partner Center, **Apps and games > New product > MSIX or PWA app**, and reserve
-   the name **Forecast Center** (or a variant if it is taken).
-3. Open **Product management > Product identity** and copy these three values into
-   `src/ForecastCenter/Packaging/Package.appxmanifest`, replacing the `PARTNER-CENTER`
-   placeholders:
-   - `Package/Identity/Name`
-   - `Package/Identity/Publisher` (starts with `CN=`)
-   - `Package/Properties/PublisherDisplayName`
+2. The name **Forecast Center** is reserved (Store ID `9NCKT4BX2BM7`,
+   <https://apps.microsoft.com/detail/9NCKT4BX2BM7>).
+3. `src/ForecastCenter/Packaging/Package.appxmanifest` already carries the product identity
+   from **Product management > Product identity** (`Wrenchware.ForecastCenter`, publisher
+   `CN=2FF27026-D288-4721-AF75-758FA73DF3A2`, display name `Wrenchware`).
 
 ## Building the upload package
 
