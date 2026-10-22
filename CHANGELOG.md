@@ -2,6 +2,23 @@
 
 Notable user-facing changes to Forecast Center are recorded here. GitHub Releases contain matching downloadable installer notes.
 
+## 1.0.3 - 2026-10-21
+
+### Improved
+
+- Open noticeably faster: the dashboard now appears with your last saved forecast almost immediately, then refreshes in place.
+- Load forecast, air quality, tides, alerts, and forecast narratives in parallel, roughly halving the time to a full refresh.
+- Start the radar map at launch and keep its loading screen up until the map has actually drawn.
+- Use the last known position at launch when automatic location is on, instead of waiting on Windows location services.
+- Replace the "Updating…" banner, which shifted the dashboard on every refresh, with a small progress indicator beside the update time.
+- Keep forecast cards and condition artwork steady during refreshes instead of briefly redrawing them.
+- Shorten page transitions and follow the Windows animation-effects setting.
+- Ship ReadyToRun-compiled builds for faster startup.
+
+### Fixed
+
+- Moved radar-forecast processing and the NOAA tide-station list off the interface thread to prevent brief freezes while the dashboard loads.
+
 ## 1.0.2 - 2026-09-03
 
 ### Added

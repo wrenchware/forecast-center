@@ -1,5 +1,5 @@
 #define MyAppName "Forecast Center"
-#define MyAppVersion "1.0.2"
+#define MyAppVersion "1.0.3"
 #define MyAppPublisher "Forecast Center contributors"
 #define MyAppExeName "ForecastCenter.Public.exe"
 
