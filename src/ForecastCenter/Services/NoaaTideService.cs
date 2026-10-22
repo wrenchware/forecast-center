@@ -30,6 +30,39 @@ public sealed class NoaaTideService(HttpClient http)
     public async Task<IReadOnlyList<TideStation>> GetStationsAsync(CancellationToken ct, bool forceRefresh = false)
     {
         if (_stationCatalog is not null && !forceRefresh) return _stationCatalog;
+        // The catalog is ~3,500 stations; parse it on the thread pool so the UI
+        // thread never stalls while the dashboard is animating in.
+        return await Task.Run(() => LoadStationsAsync(ct, forceRefresh), ct);
+    }
+
+    /// <summary>
+    /// Resolves tide visibility and the last saved predictions from disk only, so a
+    /// cached launch shows the tide card in its final state without a network round trip.
+    /// </summary>
+    public async Task<(bool NearStation, TideSnapshot? Snapshot)> TryGetCachedAsync(LocationResult location, string? stationOverride)
+    {
+        try
+        {
+            return await Task.Run(async () =>
+            {
+                var catalogPath = Path.Combine(_cacheFolder, "noaa-tide-stations.json");
+                IReadOnlyList<TideStation> stations = _stationCatalog
+                    ?? (File.Exists(catalogPath) ? JsonSerializer.Deserialize<List<TideStation>>(await File.ReadAllTextAsync(catalogPath)) : null)
+                    ?? Stations;
+                if (stations.Count == 0) return (false, (TideSnapshot?)null);
+                var near = stationOverride is not null || stations.Min(item => DistanceKm(location.Latitude, location.Longitude, item.Latitude, item.Longitude)) <= 180;
+                if (!near) return (false, null);
+                var station = stations.FirstOrDefault(item => item.Id == stationOverride) ?? stations.MinBy(item => DistanceKm(location.Latitude, location.Longitude, item.Latitude, item.Longitude))!;
+                var cachePath = Path.Combine(_cacheFolder, $"{station.Id}.json");
+                var snapshot = File.Exists(cachePath) ? JsonSerializer.Deserialize<TideSnapshot>(await File.ReadAllTextAsync(cachePath)) : null;
+                return (true, snapshot);
+            });
+        }
+        catch { return (true, null); }
+    }
+
+    private async Task<IReadOnlyList<TideStation>> LoadStationsAsync(CancellationToken ct, bool forceRefresh)
+    {
         var cachePath = Path.Combine(_cacheFolder, "noaa-tide-stations.json");
         try
         {

@@ -13,21 +13,55 @@ public sealed class HrrrRadarService
 {
     private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(18) };
     private readonly Dictionary<string, CacheEntry> _cache = [];
+    private readonly Dictionary<string, Task<IReadOnlyList<HrrrRadarFrame>>> _inFlight = [];
+    private readonly object _sync = new();
 
     public HrrrRadarService() => _http.DefaultRequestHeaders.UserAgent.ParseAdd(AppIdentity.NetworkUserAgent);
 
-    public async Task<IReadOnlyList<HrrrRadarFrame>> GetFramesAsync(
+    public Task<IReadOnlyList<HrrrRadarFrame>> GetFramesAsync(
         double latitude,
         double longitude,
         bool snowPalette,
         CancellationToken cancellationToken = default)
     {
-        if (latitude is < 21 or > 52 || longitude is < -135 or > -60) return [];
+        if (latitude is < 21 or > 52 || longitude is < -135 or > -60) return Task.FromResult<IReadOnlyList<HrrrRadarFrame>>([]);
 
-        var bounds = GetBounds(latitude, longitude);
         var key = $"{Math.Round(latitude, 1)}|{Math.Round(longitude, 1)}|{snowPalette}";
-        if (_cache.TryGetValue(key, out var cached) && DateTimeOffset.UtcNow - cached.SavedAt < TimeSpan.FromMinutes(45))
-            return cached.Frames;
+        lock (_sync)
+        {
+            if (_cache.TryGetValue(key, out var cached) && DateTimeOffset.UtcNow - cached.SavedAt < TimeSpan.FromMinutes(45))
+                return Task.FromResult(cached.Frames);
+            // Overlapping refreshes (radar navigation plus a weather refresh) share one download.
+            if (_inFlight.TryGetValue(key, out var pending)) return pending;
+            // Run the whole fetch on the thread pool: GRIB decoding and PNG encoding are
+            // CPU-heavy and previously resumed on the UI thread after each download.
+            var task = Task.Run(() => FetchFramesAsync(latitude, longitude, snowPalette, key, cancellationToken), cancellationToken);
+            _inFlight[key] = task;
+            return task;
+        }
+    }
+
+    private async Task<IReadOnlyList<HrrrRadarFrame>> FetchFramesAsync(
+        double latitude,
+        double longitude,
+        bool snowPalette,
+        string key,
+        CancellationToken cancellationToken)
+    {
+        try { return await FetchFramesCoreAsync(latitude, longitude, snowPalette, key, cancellationToken); }
+        finally { lock (_sync) _inFlight.Remove(key); }
+    }
+
+    private async Task<IReadOnlyList<HrrrRadarFrame>> FetchFramesCoreAsync(
+        double latitude,
+        double longitude,
+        bool snowPalette,
+        string key,
+        CancellationToken cancellationToken)
+    {
+        var bounds = GetBounds(latitude, longitude);
+        CacheEntry? cached;
+        lock (_sync) _cache.TryGetValue(key, out cached);
 
         var probe = await FindLatestCycleAsync(bounds, cancellationToken);
         if (probe is null)
@@ -67,8 +101,11 @@ public sealed class HrrrRadarService
 
         if (frames.Count > 0)
         {
-            _cache[key] = new(DateTimeOffset.UtcNow, frames);
-            while (_cache.Count > 8) _cache.Remove(_cache.OrderBy(pair => pair.Value.SavedAt).First().Key);
+            lock (_sync)
+            {
+                _cache[key] = new(DateTimeOffset.UtcNow, frames);
+                while (_cache.Count > 8) _cache.Remove(_cache.OrderBy(pair => pair.Value.SavedAt).First().Key);
+            }
         }
         return frames.Count > 0 ? frames : (cached?.Frames ?? []);
     }

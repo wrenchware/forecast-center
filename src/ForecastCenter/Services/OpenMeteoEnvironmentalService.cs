@@ -48,6 +48,18 @@ public sealed class OpenMeteoEnvironmentalService(HttpClient http)
         }
     }
 
+    public async Task<EnvironmentalSnapshot?> TryGetCachedAsync(LocationResult location)
+    {
+        var cachePath = Path.Combine(_cacheFolder, $"{location.Latitude:F3}_{location.Longitude:F3}.json");
+        try
+        {
+            return await Task.Run(async () => File.Exists(cachePath)
+                ? JsonSerializer.Deserialize<EnvironmentalSnapshot>(await File.ReadAllTextAsync(cachePath))
+                : null);
+        }
+        catch { return null; }
+    }
+
     private static string DominantPollutant(CurrentAirQuality current)
     {
         var values = new (string Name, double Value)[]

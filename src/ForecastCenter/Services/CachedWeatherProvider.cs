@@ -21,7 +21,7 @@ public sealed class CachedWeatherProvider : IWeatherProvider
 
     public async Task<WeatherSnapshot> GetWeatherAsync(LocationResult location, bool metric, CancellationToken cancellationToken)
     {
-        var path = Path.Combine(_folder, $"{location.Latitude:F3}_{location.Longitude:F3}_{(metric ? "metric" : "imperial")}.json");
+        var path = CachePath(location, metric);
         try
         {
             var result = await _inner.GetWeatherAsync(location, metric, cancellationToken);
@@ -34,21 +34,41 @@ public sealed class CachedWeatherProvider : IWeatherProvider
         catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
         {
             WriteDiagnostic($"Refresh failed: {ex}");
-            if (!File.Exists(path)) throw;
-            var cached = JsonSerializer.Deserialize<WeatherSnapshot>(await File.ReadAllTextAsync(path, cancellationToken));
+            var cached = await TryGetCachedAsync(location, metric);
             if (cached is null) throw;
             LastResultWasCached = true;
             return cached;
         }
     }
 
-    private void WriteDiagnostic(string message)
+    /// <summary>Reads the last saved forecast without touching the network, so launch can paint immediately.</summary>
+    public async Task<WeatherSnapshot?> TryGetCachedAsync(LocationResult location, bool metric, TimeSpan? maxAge = null)
     {
+        var path = CachePath(location, metric);
         try
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(_diagnosticPath)!);
-            File.WriteAllText(_diagnosticPath, $"{DateTimeOffset.Now:O}{Environment.NewLine}{message}");
+            return await Task.Run(async () =>
+                File.Exists(path) && (maxAge is null || DateTime.UtcNow - File.GetLastWriteTimeUtc(path) <= maxAge)
+                    ? JsonSerializer.Deserialize<WeatherSnapshot>(await File.ReadAllTextAsync(path))
+                    : null);
         }
-        catch { }
+        catch { return null; }
+    }
+
+    private string CachePath(LocationResult location, bool metric) =>
+        Path.Combine(_folder, $"{location.Latitude:F3}_{location.Longitude:F3}_{(metric ? "metric" : "imperial")}.json");
+
+    private void WriteDiagnostic(string message)
+    {
+        var path = _diagnosticPath;
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                File.WriteAllText(path, $"{DateTimeOffset.Now:O}{Environment.NewLine}{message}");
+            }
+            catch { }
+        });
     }
 }

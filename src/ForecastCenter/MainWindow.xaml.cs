@@ -39,6 +39,11 @@ public sealed partial class MainWindow : Window
     private readonly DispatcherQueueTimer _windowStateTimer;
     private readonly DispatcherQueueTimer _weatherRefreshTimer;
     private readonly DispatcherQueueTimer _tideStatusTimer;
+    private readonly DispatcherQueueTimer _radarRevealFallbackTimer;
+    private readonly Dictionary<FrameworkElement, int> _overlayVersions = [];
+    private string? _radarConditionsKey;
+    private bool _settingsUiBuilt;
+    private string? _lastUpdateStatus;
     private DateTimeOffset _lastWeatherRefresh = DateTimeOffset.MinValue;
     private double _pendingDashboardWidth;
     private double _lastDashboardLayoutWidth = double.NaN;
@@ -85,8 +90,12 @@ public sealed partial class MainWindow : Window
                 DispatcherQueue.TryEnqueue(SyncTideStationPickers);
             else if (args.PropertyName == nameof(ViewModel.TideVisibility))
                 DispatcherQueue.TryEnqueue(() => UpdateForecastLayout(DashboardGrid.ActualWidth));
+            else if (args.PropertyName == nameof(ViewModel.TideStationChoices))
+            {
+                if (_tideStationPicker is not null) _tideStationPicker.ItemsSource = ViewModel.TideStationChoices;
+                SyncTideStationPickers();
+            }
         };
-        NormalizeCommandCardTints();
         StartLoadingShimmer(RadarLoadingShimmer);
         StartLoadingShimmer(DashboardSkeletonShimmer);
         ElementCompositionPreview.GetElementVisual(WeatherPage).Opacity = 0;
@@ -96,7 +105,8 @@ public sealed partial class MainWindow : Window
         {
             WeatherPage.Focus(FocusState.Programmatic);
         };
-        InitializeThemeSettings();
+        // Settings controls and the tray icon are built after first paint
+        // (EnsureSettingsUi / InitializeTrayIcon), keeping them off the launch path.
         ApplyTheme(ViewModel.Theme);
         _resizeTimer = DispatcherQueue.CreateTimer();
         _resizeTimer.Interval = TimeSpan.FromMilliseconds(90);
@@ -114,6 +124,10 @@ public sealed partial class MainWindow : Window
         _tideStatusTimer.Interval = TimeSpan.FromMinutes(1);
         _tideStatusTimer.IsRepeating = true;
         _tideStatusTimer.Tick += (_, _) => ViewModel.UpdateTideStatus();
+        _radarRevealFallbackTimer = DispatcherQueue.CreateTimer();
+        _radarRevealFallbackTimer.Interval = TimeSpan.FromSeconds(5);
+        _radarRevealFallbackTimer.IsRepeating = false;
+        _radarRevealFallbackTimer.Tick += (_, _) => HideLoadingOverlay(DashboardRadarLoading);
         Title = "Forecast Center";
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(TitleBarDragRegion);
@@ -137,7 +151,6 @@ public sealed partial class MainWindow : Window
         appWindow.Changed += AppWindow_Changed;
         appWindow.Closing += (_, _) => SaveWindowState();
         Closed += MainWindow_Closed;
-        InitializeTrayIcon();
         appWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "forecast-center.ico"));
         ApplyNativeTitleBarTheme(windowHandle);
         _uiSettings.ColorValuesChanged += (_, _) => DispatcherQueue.TryEnqueue(async () =>
@@ -329,29 +342,32 @@ public sealed partial class MainWindow : Window
     private async void MainWindow_Activated(object sender, WindowActivatedEventArgs args)
     {
         Activated -= MainWindow_Activated;
-        _initialized = true;
-        UnitsRadio.SelectedIndex = ViewModel.Metric ? 1 : 0;
-        if (_themeRadio is not null)
-            _themeRadio.SelectedIndex = ViewModel.Theme.ToLowerInvariant() switch { "light" => 1, "dark" => 2, _ => 0 };
-        if (ViewModel.AutomaticLocation)
-        {
-            try
-            {
-                if (await _windowsLocationService.GetCurrentLocationAsync() is { } location) ViewModel.CurrentLocation = location;
-                else throw new InvalidOperationException();
-            }
-            catch
-            {
-                await ViewModel.SetAutomaticLocationAsync(false);
-            }
-        }
+
+        // Windows geolocation can take many seconds. Paint from the last known
+        // position now and move to the fresh one when it arrives.
+        var automaticLocationTask = ViewModel.AutomaticLocation ? ResolveAutomaticLocationAsync() : Task.FromResult<LocationResult?>(null);
+
+        // Saved data paints the dashboard in a few milliseconds on most launches.
+        var hasCachedForecast = await ViewModel.LoadCachedAsync();
+
+        // Start the slow, independent pieces together: WebView2 start-up and the
+        // network refresh.
+        var radarTask = InitializeDashboardRadarAsync();
         var initialWeatherLoad = RefreshWeatherAndRadarAsync(refreshRadar: false);
-        // The skeleton is a launch transition, not a network-blocking screen.
-        // Yield after a short cap and let slow data continue populating in place.
-        await Task.WhenAny(initialWeatherLoad, Task.Delay(1100));
+        // Set only now: the stale-refresh handler runs on this same first activation
+        // and must see the initial load as in progress rather than start its own.
+        _initialized = true;
+        UpdateForecastLayout(DashboardGrid.ActualWidth);
+        RefreshLocationPicker();
+        UpdateDefaultLocationButton();
+
+        // The skeleton is only a fallback for launches with nothing saved. Yield after
+        // a short cap and let slow data continue populating in place.
+        if (!hasCachedForecast) await Task.WhenAny(initialWeatherLoad, Task.Delay(1100));
         await RevealDashboardAsync();
-        _ = CheckForUpdatesAsync(force: false, showCurrentStatus: false);
-        _ = InitializeDashboardRadarAsync();
+        DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, InitializeTrayIcon);
+        _ = CheckForUpdatesAfterLaunchAsync();
+
         await initialWeatherLoad;
         SyncTideStationPickers();
         RefreshLocationPicker();
@@ -359,6 +375,69 @@ public sealed partial class MainWindow : Window
         DispatcherQueue.TryEnqueue(() => { UpdatePagerButtons(HourlyScroller); UpdatePagerButtons(DailyScroller); UpdateHourlyTrendRange(); });
         _weatherRefreshTimer.Start();
         _tideStatusTimer.Start();
+        await SyncRadarWithCurrentConditionsAsync();
+        await ApplyAutomaticLocationAsync(await automaticLocationTask);
+        await radarTask;
+    }
+
+    private async Task<LocationResult?> ResolveAutomaticLocationAsync()
+    {
+        try { return await _windowsLocationService.GetCurrentLocationAsync(); }
+        catch { return null; }
+    }
+
+    private async Task ApplyAutomaticLocationAsync(LocationResult? location)
+    {
+        if (!ViewModel.AutomaticLocation) return;
+        if (location is null)
+        {
+            await ViewModel.SetAutomaticLocationAsync(false);
+            RefreshLocationPicker();
+            return;
+        }
+        await ViewModel.RememberAutomaticLocationAsync(location);
+        // Ignore GPS jitter; only move when the position meaningfully changed.
+        if (Math.Abs(location.Latitude - ViewModel.CurrentLocation.Latitude) < .02 && Math.Abs(location.Longitude - ViewModel.CurrentLocation.Longitude) < .02) return;
+        await ChangeLocationWithTransitionAsync(location, saveLocation: false);
+        RefreshLocationPicker();
+    }
+
+    private async Task CheckForUpdatesAfterLaunchAsync()
+    {
+        // Let the launch transition and first data settle before a possible dialog.
+        await Task.Delay(TimeSpan.FromSeconds(4));
+        await CheckForUpdatesAsync(force: false, showCurrentStatus: false);
+    }
+
+    private string RadarConditionsKey() => $"{ViewModel.Temperature}|{ViewModel.RadarSnowPossible}|{ViewModel.CurrentLocation.StorageKey}";
+
+    /// <summary>
+    /// The radar starts loading before fresh weather arrives. Afterwards, push the new
+    /// temperature, and reload only if snow possibility (which changes the legend) flipped.
+    /// </summary>
+    private async Task SyncRadarWithCurrentConditionsAsync()
+    {
+        if (DashboardRadarWebView.CoreWebView2 is null || _radarConditionsKey is null || _radarConditionsKey == RadarConditionsKey()) return;
+        var previousSnow = _radarConditionsKey.Split('|')[1];
+        _radarConditionsKey = RadarConditionsKey();
+        if (previousSnow != ViewModel.RadarSnowPossible.ToString())
+        {
+            await ReloadRadarLocationsAsync();
+            return;
+        }
+        var currentTemperatureJson = JsonSerializer.Serialize(ViewModel.Temperature);
+        foreach (var webView in RadarWebViews().ToList())
+        {
+            try { await webView.CoreWebView2.ExecuteScriptAsync($"window.setCurrentTemperature?.({currentTemperatureJson});"); }
+            catch { }
+        }
+    }
+
+    /// <summary>The radar views that have finished initializing (the full-page radar starts on first open).</summary>
+    private IEnumerable<WebView2> RadarWebViews()
+    {
+        if (DashboardRadarWebView.CoreWebView2 is not null) yield return DashboardRadarWebView;
+        if (RadarWebView.CoreWebView2 is not null) yield return RadarWebView;
     }
 
     private async Task InitializeDashboardRadarAsync()
@@ -468,16 +547,6 @@ public sealed partial class MainWindow : Window
         if (sender is FrameworkElement summary) CloseForecastToolTip(summary);
     }
 
-    private void NormalizeCommandCardTints()
-    {
-        NearTermCard.Background = new SolidColorBrush(ColorHelper.FromArgb(14, 42, 142, 219));
-        NearTermCard.BorderBrush = new SolidColorBrush(ColorHelper.FromArgb(36, 42, 142, 219));
-        TemperatureTrendCard.Background = new SolidColorBrush(ColorHelper.FromArgb(14, 155, 139, 234));
-        TemperatureTrendCard.BorderBrush = new SolidColorBrush(ColorHelper.FromArgb(36, 155, 139, 234));
-        DaylightCard.Background = new SolidColorBrush(ColorHelper.FromArgb(14, 242, 184, 75));
-        DaylightCard.BorderBrush = new SolidColorBrush(ColorHelper.FromArgb(36, 242, 184, 75));
-    }
-
     private async void MainWindow_RefreshWhenStale(object sender, WindowActivatedEventArgs args)
     {
         if (!_initialized || args.WindowActivationState == WindowActivationState.Deactivated || ViewModel.IsBusy) return;
@@ -498,10 +567,10 @@ public sealed partial class MainWindow : Window
 
     private async Task RefreshRadarAsync()
     {
+        _radarConditionsKey = RadarConditionsKey();
         var currentTemperatureJson = JsonSerializer.Serialize(ViewModel.Temperature);
-        foreach (var webView in new[] { DashboardRadarWebView, RadarWebView })
+        foreach (var webView in RadarWebViews().ToList())
         {
-            if (webView.CoreWebView2 is null) continue;
             try
             {
                 await webView.CoreWebView2.ExecuteScriptAsync($"window.setCurrentTemperature?.({currentTemperatureJson});");
@@ -520,11 +589,10 @@ public sealed partial class MainWindow : Window
                 observedTimeout.Token);
         }
         catch { }
-        var observedJson = JsonSerializer.Serialize(observedFrames);
-        foreach (var webView in new[] { DashboardRadarWebView, RadarWebView })
+        var observedScript = await Task.Run(() => $"window.setObservedFrames?.({JsonSerializer.Serialize(observedFrames)});");
+        foreach (var webView in RadarWebViews().ToList())
         {
-            if (webView.CoreWebView2 is null) continue;
-            try { await webView.CoreWebView2.ExecuteScriptAsync($"window.setObservedFrames?.({observedJson});"); }
+            try { await webView.CoreWebView2.ExecuteScriptAsync(observedScript); }
             catch { }
         }
 
@@ -555,15 +623,16 @@ public sealed partial class MainWindow : Window
             try { forecastTimes = await _ndfdPrecipitationService.GetValidTimesAsync(); }
             catch { }
         }
-        var framesJson = JsonSerializer.Serialize(forecastFrames);
-        var forecastJson = JsonSerializer.Serialize(forecastTimes.Select(time => time.UtcDateTime.ToString("yyyy-MM-ddTHH:mm")));
-        foreach (var webView in new[] { DashboardRadarWebView, RadarWebView })
+        // The frames are base64 PNGs (often a few MB); build the scripts off the UI thread.
+        var (framesScript, forecastScript) = await Task.Run(() => (
+            $"window.setHrrrFrames?.({JsonSerializer.Serialize(forecastFrames)});",
+            $"window.setForecastTimes?.({JsonSerializer.Serialize(forecastTimes.Select(time => time.UtcDateTime.ToString("yyyy-MM-ddTHH:mm")))});"));
+        foreach (var webView in RadarWebViews().ToList())
         {
-            if (webView.CoreWebView2 is null) continue;
             try
             {
-                await webView.CoreWebView2.ExecuteScriptAsync($"window.setHrrrFrames?.({framesJson});");
-                await webView.CoreWebView2.ExecuteScriptAsync($"window.setForecastTimes?.({forecastJson});");
+                await webView.CoreWebView2.ExecuteScriptAsync(framesScript);
+                await webView.CoreWebView2.ExecuteScriptAsync(forecastScript);
             }
             catch { }
         }
@@ -597,7 +666,7 @@ public sealed partial class MainWindow : Window
     private async Task PushNearbyRadarCitiesAsync(IReadOnlyList<NearbyTemperature> cities, WebView2? target)
     {
         var citiesJson = JsonSerializer.Serialize(cities);
-        var webViews = target is null ? new[] { DashboardRadarWebView, RadarWebView } : new[] { target };
+        var webViews = target is null ? RadarWebViews().ToList() : [target];
         foreach (var webView in webViews)
         {
             if (webView.CoreWebView2 is null) continue;
@@ -633,9 +702,7 @@ public sealed partial class MainWindow : Window
     private sealed record RadarTemperatureCache(DateTimeOffset SavedAt, List<NearbyTemperature> Cities);
     private async void OpenRadar_Click(object sender, RoutedEventArgs e)
     {
-        WeatherPage.Visibility = AlertsPage.Visibility = SettingsPage.Visibility = Visibility.Collapsed;
-        RadarPage.Visibility = Visibility.Visible;
-        AnimatePageEntrance(RadarPage);
+        ShowPage(RadarPage);
         if (!_radarReady)
         {
             _radarReady = true;
@@ -648,29 +715,38 @@ public sealed partial class MainWindow : Window
         e.Handled = true;
         ShowAlertsPage();
     }
-    private void ShowAlertsPage()
-    {
-        WeatherPage.Visibility = RadarPage.Visibility = SettingsPage.Visibility = Visibility.Collapsed;
-        AlertsPage.Visibility = Visibility.Visible;
-        AnimatePageEntrance(AlertsPage);
-    }
+    private void ShowAlertsPage() => ShowPage(AlertsPage);
     private void OpenSettings_Click(object sender, RoutedEventArgs e)
         => ShowSettingsPage("general");
     private void ShowSettingsPage(string section)
     {
-        WeatherPage.Visibility = RadarPage.Visibility = AlertsPage.Visibility = Visibility.Collapsed;
-        SettingsPage.Visibility = Visibility.Visible;
+        EnsureSettingsUi();
+        ShowPage(SettingsPage);
         var item = SettingsNav.MenuItems.OfType<NavigationViewItem>()
             .FirstOrDefault(candidate => string.Equals(candidate.Tag as string, section, StringComparison.Ordinal));
         if (item is not null) SettingsNav.SelectedItem = item;
-        AnimatePageEntrance(SettingsPage);
     }
     private void BackToWeather_Click(object sender, RoutedEventArgs e)
     {
-        RadarPage.Visibility = AlertsPage.Visibility = SettingsPage.Visibility = Visibility.Collapsed;
         RefreshLocationPicker();
-        WeatherPage.Visibility = Visibility.Visible;
-        AnimatePageEntrance(WeatherPage);
+        ShowPage(WeatherPage);
+    }
+
+    private void ShowPage(FrameworkElement page)
+    {
+        foreach (var other in new FrameworkElement[] { WeatherPage, RadarPage, AlertsPage, SettingsPage })
+            if (!ReferenceEquals(other, page)) other.Visibility = Visibility.Collapsed;
+        page.Visibility = Visibility.Visible;
+        AnimatePageEntrance(page);
+    }
+
+    /// <summary>Settings controls are built on first open, keeping them off the launch path.</summary>
+    private void EnsureSettingsUi()
+    {
+        if (_settingsUiBuilt) return;
+        _settingsUiBuilt = true;
+        UnitsRadio.SelectedIndex = ViewModel.Metric ? 1 : 0;
+        InitializeThemeSettings();
     }
     private void SettingsDashboard_Click(object sender, RoutedEventArgs e)
     {
@@ -683,22 +759,32 @@ public sealed partial class MainWindow : Window
         UpdateDefaultLocationButton();
     }
 
-    private static void AnimatePageEntrance(FrameworkElement page)
+    private void AnimatePageEntrance(FrameworkElement page)
     {
         var visual = ElementCompositionPreview.GetElementVisual(page);
+        visual.StopAnimation(nameof(visual.Opacity));
+        visual.StopAnimation(nameof(visual.Offset));
+        if (!_uiSettings.AnimationsEnabled)
+        {
+            visual.Opacity = 1;
+            visual.Offset = Vector3.Zero;
+            return;
+        }
+
         var compositor = visual.Compositor;
-        var easing = compositor.CreateCubicBezierEasingFunction(new Vector2(0.2f, 0.8f), new Vector2(0.2f, 1f));
+        var easing = compositor.CreateCubicBezierEasingFunction(new Vector2(0.1f, 0.9f), new Vector2(0.2f, 1f));
 
         visual.Opacity = 0;
-        visual.Offset = new Vector3(0, 24, 0);
+        visual.Offset = new Vector3(0, 12, 0);
 
+        // Short and decelerating: page switches should feel immediate, not staged.
         var fade = compositor.CreateScalarKeyFrameAnimation();
         fade.InsertKeyFrame(1, 1, easing);
-        fade.Duration = TimeSpan.FromMilliseconds(750);
+        fade.Duration = TimeSpan.FromMilliseconds(220);
 
         var rise = compositor.CreateVector3KeyFrameAnimation();
         rise.InsertKeyFrame(1, Vector3.Zero, easing);
-        rise.Duration = TimeSpan.FromMilliseconds(750);
+        rise.Duration = TimeSpan.FromMilliseconds(300);
 
         visual.StartAnimation(nameof(visual.Opacity), fade);
         visual.StartAnimation(nameof(visual.Offset), rise);
@@ -708,14 +794,18 @@ public sealed partial class MainWindow : Window
     {
         AnimatePageEntrance(WeatherPage);
         var skeletonVisual = ElementCompositionPreview.GetElementVisual(DashboardSkeleton);
-        var fade = skeletonVisual.Compositor.CreateScalarKeyFrameAnimation();
-        fade.InsertKeyFrame(1, 0);
-        fade.Duration = TimeSpan.FromMilliseconds(360);
-        skeletonVisual.StartAnimation(nameof(skeletonVisual.Opacity), fade);
-        await Task.Delay(380);
+        if (_uiSettings.AnimationsEnabled)
+        {
+            var fade = skeletonVisual.Compositor.CreateScalarKeyFrameAnimation();
+            fade.InsertKeyFrame(1, 0);
+            fade.Duration = TimeSpan.FromMilliseconds(220);
+            skeletonVisual.StartAnimation(nameof(skeletonVisual.Opacity), fade);
+            await Task.Delay(240);
+        }
         DashboardSkeleton.Visibility = Visibility.Collapsed;
         skeletonVisual.StopAnimation(nameof(skeletonVisual.Opacity));
         skeletonVisual.Opacity = 1;
+        StopLoadingShimmer(DashboardSkeletonShimmer);
     }
 
     private void UpdateDefaultLocationButton() => DefaultLocationButton.Visibility = ViewModel.IsCurrentLocationDefault ? Visibility.Collapsed : Visibility.Visible;
@@ -1058,12 +1148,34 @@ public sealed partial class MainWindow : Window
         HeroSecondRow.Height = narrow ? GridLength.Auto : new GridLength(0);
         Grid.SetColumn(DashboardRadarSection, narrow ? 0 : 1);
         Grid.SetRow(DashboardRadarSection, narrow ? 1 : 0);
+        UpdateSkeletonLayout(narrow, commandColumnCount);
 
         BottomFeatureColumn1.Width = new GridLength(1, GridUnitType.Star);
         BottomFeatureColumn2.Width = new GridLength(0);
         Grid.SetColumn(DashboardDetailsSection, 0);
         Grid.SetColumnSpan(DashboardDetailsSection, 2);
         Grid.SetRow(DashboardDetailsSection, 0);
+    }
+
+    /// <summary>Mirrors the dashboard's responsive grid so the reveal doesn't visibly jump.</summary>
+    private void UpdateSkeletonLayout(bool narrow, int commandColumnCount)
+    {
+        if (DashboardSkeleton.Visibility != Visibility.Visible) return;
+        SkeletonHeroSecondaryColumn.Width = narrow ? new GridLength(0) : new GridLength(1, GridUnitType.Star);
+        SkeletonHeroSecondRow.Height = narrow ? new GridLength(450) : new GridLength(0);
+        Grid.SetColumn(SkeletonRadarCard, narrow ? 0 : 1);
+        Grid.SetRow(SkeletonRadarCard, narrow ? 1 : 0);
+        SkeletonCommandColumn2.Width = commandColumnCount >= 2 ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
+        SkeletonCommandColumn3.Width = commandColumnCount >= 3 ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
+        var cards = SkeletonCommandGrid.Children.OfType<FrameworkElement>().ToList();
+        var rows = (int)Math.Ceiling(cards.Count / (double)commandColumnCount);
+        while (SkeletonCommandGrid.RowDefinitions.Count < rows) SkeletonCommandGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(116) });
+        while (SkeletonCommandGrid.RowDefinitions.Count > rows) SkeletonCommandGrid.RowDefinitions.RemoveAt(SkeletonCommandGrid.RowDefinitions.Count - 1);
+        for (var index = 0; index < cards.Count; index++)
+        {
+            Grid.SetColumn(cards[index], index % commandColumnCount);
+            Grid.SetRow(cards[index], index / commandColumnCount);
+        }
     }
 
     private async void DailyForecast_Click(object sender, RoutedEventArgs e)
@@ -1244,6 +1356,7 @@ public sealed partial class MainWindow : Window
         _themeRadio.Items.Add("System");
         _themeRadio.Items.Add("Light");
         _themeRadio.Items.Add("Dark");
+        _themeRadio.SelectedIndex = ViewModel.Theme.ToLowerInvariant() switch { "light" => 1, "dark" => 2, _ => 0 };
         _themeRadio.SelectionChanged += ThemeRadio_SelectionChanged;
         ThemeSettingsHost.Children.Add(_themeRadio);
         _minimizeToTrayCheckBox = new CheckBox { Content = "Minimize to system tray", IsChecked = ViewModel.MinimizeToTray };
@@ -1339,7 +1452,7 @@ public sealed partial class MainWindow : Window
 
         _updateStatusText = new TextBlock
         {
-            Text = "Updates are checked automatically once a day.",
+            Text = _lastUpdateStatus ?? "Updates are checked automatically once a day.",
             TextWrapping = TextWrapping.Wrap,
             Opacity = 0.72
         };
@@ -1364,10 +1477,11 @@ public sealed partial class MainWindow : Window
         try
         {
             var status = await _updateService.CheckAsync(force);
-            if (_updateStatusText is not null)
-                _updateStatusText.Text = status.UpdateAvailable
-                    ? $"Version {status.LatestVersion} is available."
-                    : $"Forecast Center {status.InstalledVersion} is up to date.";
+            // Settings is built on first open, so remember the result for it.
+            _lastUpdateStatus = status.UpdateAvailable
+                ? $"Version {status.LatestVersion} is available."
+                : $"Forecast Center {status.InstalledVersion} is up to date.";
+            if (_updateStatusText is not null) _updateStatusText.Text = _lastUpdateStatus;
             if (status.UpdateAvailable) await ShowUpdateDialogAsync(status);
         }
         catch
@@ -1684,16 +1798,16 @@ public sealed partial class MainWindow : Window
 
     private async Task ApplyRadarMapThemeAsync(string mapTheme)
     {
-        foreach (var webView in new[] { DashboardRadarWebView, RadarWebView })
+        foreach (var webView in RadarWebViews().ToList())
         {
-            if (webView.CoreWebView2 is null) continue;
             try { await webView.CoreWebView2.ExecuteScriptAsync($"window.setMapTheme?.('{mapTheme}');"); }
             catch { }
         }
     }
 
-    private static void StartLoadingShimmer(FrameworkElement element)
+    private void StartLoadingShimmer(FrameworkElement element)
     {
+        if (!_uiSettings.AnimationsEnabled) return;
         var visual = ElementCompositionPreview.GetElementVisual(element);
         var animation = visual.Compositor.CreateScalarKeyFrameAnimation();
         animation.InsertKeyFrame(0, -260f);
@@ -1703,27 +1817,45 @@ public sealed partial class MainWindow : Window
         visual.StartAnimation("Offset.X", animation);
     }
 
-    private static void ShowLoadingOverlay(FrameworkElement overlay)
+    private static void StopLoadingShimmer(FrameworkElement element) =>
+        ElementCompositionPreview.GetElementVisual(element).StopAnimation("Offset.X");
+
+    private FrameworkElement? ShimmerFor(FrameworkElement overlay) =>
+        ReferenceEquals(overlay, DashboardRadarLoading) ? RadarLoadingShimmer : null;
+
+    private void ShowLoadingOverlay(FrameworkElement overlay)
     {
+        // Invalidate any fade-out in flight so it cannot collapse the overlay we just showed.
+        _overlayVersions[overlay] = _overlayVersions.GetValueOrDefault(overlay) + 1;
         var visual = ElementCompositionPreview.GetElementVisual(overlay);
         visual.StopAnimation("Opacity");
         visual.Opacity = 1;
         overlay.Opacity = 1;
+        var wasVisible = overlay.Visibility == Visibility.Visible;
         overlay.Visibility = Visibility.Visible;
+        if (!wasVisible && ShimmerFor(overlay) is { } shimmer) StartLoadingShimmer(shimmer);
     }
 
     private async void HideLoadingOverlay(FrameworkElement overlay)
     {
         if (overlay.Visibility != Visibility.Visible) return;
+        var version = _overlayVersions[overlay] = _overlayVersions.GetValueOrDefault(overlay) + 1;
         var visual = ElementCompositionPreview.GetElementVisual(overlay);
-        var animation = visual.Compositor.CreateScalarKeyFrameAnimation();
-        animation.InsertKeyFrame(0, 1f);
-        animation.InsertKeyFrame(1, 0f);
-        animation.Duration = TimeSpan.FromMilliseconds(260);
-        visual.StartAnimation("Opacity", animation);
-        await Task.Delay(280);
+        if (_uiSettings.AnimationsEnabled)
+        {
+            var animation = visual.Compositor.CreateScalarKeyFrameAnimation();
+            animation.InsertKeyFrame(0, 1f);
+            animation.InsertKeyFrame(1, 0f);
+            animation.Duration = TimeSpan.FromMilliseconds(260);
+            visual.StartAnimation("Opacity", animation);
+            await Task.Delay(280);
+            if (_overlayVersions.GetValueOrDefault(overlay) != version) return;
+        }
         overlay.Visibility = Visibility.Collapsed;
         overlay.Opacity = 1;
+        visual.StopAnimation("Opacity");
+        visual.Opacity = 1;
+        if (ShimmerFor(overlay) is { } shimmer) StopLoadingShimmer(shimmer);
     }
 
     private async Task InitializeRadarAsync(WebView2 webView)
@@ -1739,12 +1871,18 @@ public sealed partial class MainWindow : Window
         await webView.EnsureCoreWebView2Async(await _webViewEnvironmentTask);
         LogRadarStartup($"CoreWebView2 created for {target}.");
         webView.DefaultBackgroundColor = Windows.UI.Color.FromArgb(0, 0, 0, 0);
-        webView.CoreWebView2.WebMessageReceived += RadarWebMessageReceived;
+        webView.CoreWebView2.WebMessageReceived += (_, e) => RadarWebMessageReceived(webView, e);
         webView.CoreWebView2.NavigationCompleted += (sender, e) =>
         {
             LogRadarStartup($"Navigation completed for {target}; success={e.IsSuccess}; error={e.WebErrorStatus}.");
+            // The page reports "radarReady" once the base map has drawn; until then the
+            // overlay stays up so a half-loaded map is never revealed. The timer is
+            // only a fallback if that message never arrives.
             if (ReferenceEquals(webView, DashboardRadarWebView) && e.IsSuccess)
-                HideLoadingOverlay(DashboardRadarLoading);
+            {
+                _radarRevealFallbackTimer.Stop();
+                _radarRevealFallbackTimer.Start();
+            }
             if (e.IsSuccess) _ = RefreshRadarAsync();
         };
         webView.CoreWebView2.SetVirtualHostNameToFolderMapping("forecastcenter.local", folder, Microsoft.Web.WebView2.Core.CoreWebView2HostResourceAccessKind.Allow);
@@ -1781,12 +1919,22 @@ public sealed partial class MainWindow : Window
         return Task.FromResult(source);
     }
 
-    private void RadarWebMessageReceived(object? sender, Microsoft.Web.WebView2.Core.CoreWebView2WebMessageReceivedEventArgs e)
+    private void RadarWebMessageReceived(WebView2 source, Microsoft.Web.WebView2.Core.CoreWebView2WebMessageReceivedEventArgs e)
     {
         try
         {
             using var message = JsonDocument.Parse(e.TryGetWebMessageAsString());
             var type = message.RootElement.GetProperty("type").GetString();
+            if (type == "radarReady")
+            {
+                if (ReferenceEquals(source, DashboardRadarWebView))
+                    DispatcherQueue.TryEnqueue(() =>
+                    {
+                        _radarRevealFallbackTimer.Stop();
+                        HideLoadingOverlay(DashboardRadarLoading);
+                    });
+                return;
+            }
             if (type == "radarHover")
             {
                 var visible = message.RootElement.GetProperty("visible").GetBoolean();

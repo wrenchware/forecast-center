@@ -22,6 +22,7 @@ public sealed partial class HourlyTrendChart : UserControl
     private IReadOnlyList<HourlyTrendPoint> _visiblePoints = [];
     private double _itemPitch;
     private int _hoveredIndex = -1;
+    private bool _renderQueued;
     public object? Items { get => GetValue(ItemsProperty); set => SetValue(ItemsProperty, value); }
     public int StartIndex { get => (int)GetValue(StartIndexProperty); set => SetValue(StartIndexProperty, value); }
     public int VisibleCount { get => (int)GetValue(VisibleCountProperty); set => SetValue(VisibleCountProperty, value); }
@@ -45,7 +46,17 @@ public sealed partial class HourlyTrendChart : UserControl
     private static void RangeChanged(DependencyObject sender, DependencyPropertyChangedEventArgs args) =>
         ((HourlyTrendChart)sender).Render();
 
-    private void CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e) => Render();
+    private void CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        // A refresh updates items one at a time; redraw once after the batch.
+        if (_renderQueued) return;
+        _renderQueued = true;
+        if (!DispatcherQueue.TryEnqueue(() => { _renderQueued = false; Render(); }))
+        {
+            _renderQueued = false;
+            Render();
+        }
+    }
     private void ChartCanvas_SizeChanged(object sender, SizeChangedEventArgs e) => Render();
 
     private void Render()

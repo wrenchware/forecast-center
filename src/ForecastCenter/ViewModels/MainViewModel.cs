@@ -12,15 +12,18 @@ public partial class MainViewModel : ObservableObject
     private readonly CachedWeatherProvider _weather;
     private readonly ILocationService _locations;
     private readonly IAlertService _alerts;
-    private readonly IForecastNarrativeService _narratives;
+    private readonly NwsForecastNarrativeService _narratives;
     private readonly ISettingsService _settings;
     private readonly OpenMeteoService _openMeteo;
     private readonly OpenMeteoEnvironmentalService _environment;
     private readonly NoaaTideService _tides;
     private CancellationTokenSource? _loadCts;
+    private int _loadGeneration;
+    private (string LocationKey, IReadOnlyDictionary<DateOnly, string> Values) _narrativeCache = ("", new Dictionary<DateOnly, string>());
+    private static readonly Dictionary<string, Microsoft.UI.Xaml.Media.Imaging.SvgImageSource> ArtworkCache = [];
 
     [ObservableProperty] private bool isBusy;
-    [ObservableProperty] private string locationName = "New York, New York";
+    [ObservableProperty] private string locationName = "";
     [ObservableProperty] private string temperature = "--°";
     [ObservableProperty] private string condition = "Loading weather…";
     [ObservableProperty] private string conditionGlyph = "·";
@@ -100,7 +103,9 @@ public partial class MainViewModel : ObservableObject
     public ObservableCollection<LocationResult> SavedLocations { get; } = [];
     public ObservableCollection<WeatherAlert> Alerts { get; } = [];
     public ObservableCollection<TideDisplayItem> TidePredictions { get; } = [];
-    public ObservableCollection<TideStationChoice> TideStationChoices { get; } =
+    // Replaced wholesale (never refilled item by item): the NOAA catalog has ~3,500
+    // stations and per-item adds flood both bound ComboBoxes with change notifications.
+    [ObservableProperty] private ObservableCollection<TideStationChoice> tideStationChoices =
         [new(null, "Automatic — nearest station"), .. NoaaTideService.Stations.Select(station => new TideStationChoice(station.Id, station.DisplayName))];
     private bool _tideStationCatalogLoaded;
     public bool HasAlerts => Alerts.Count > 0;
@@ -135,56 +140,166 @@ public partial class MainViewModel : ObservableObject
         _alerts = new NwsAlertService(http);
         _narratives = new NwsForecastNarrativeService(http);
         _settings = new SettingsService();
-        currentLocation = _settings.Current.DefaultLocation;
+        var defaultLocation = _settings.Current.DefaultLocation;
+        // With automatic location, start from the last position Windows reported; the
+        // window refreshes it in the background instead of blocking launch on geolocation.
+        currentLocation = _settings.Current.AutomaticLocation && _settings.Current.LastAutomaticLocation is { } lastAutomatic
+            ? lastAutomatic
+            : defaultLocation;
+        locationName = currentLocation.PickerDisplayName;
         foreach (var location in _settings.Current.SavedLocations) SavedLocations.Add(location);
-        if (!SavedLocations.Any(x => SameLocation(x, currentLocation))) SavedLocations.Insert(0, currentLocation);
+        if (!SavedLocations.Any(x => SameLocation(x, defaultLocation))) SavedLocations.Insert(0, defaultLocation);
     }
 
     public Task<IReadOnlyList<NearbyTemperature>> GetNearbyTemperaturesAsync(CancellationToken ct = default) =>
         _openMeteo.GetNearbyTemperaturesAsync(CurrentLocation, Metric, ct);
+
+    /// <summary>
+    /// Paints the dashboard from the last saved data (no network). Returns false when
+    /// nothing recent enough is saved for the current location.
+    /// </summary>
+    public async Task<bool> LoadCachedAsync()
+    {
+        var location = CurrentLocation;
+        var weatherTask = _weather.TryGetCachedAsync(location, Metric, maxAge: TimeSpan.FromHours(12));
+        var narrativesTask = _narratives.TryGetCachedAsync(location);
+        var environmentTask = _environment.TryGetCachedAsync(location);
+        var tidesTask = _tides.TryGetCachedAsync(location, TideStationId);
+        await Task.WhenAll(weatherTask, narrativesTask, environmentTask, tidesTask);
+        if (!SameLocation(location, CurrentLocation) || weatherTask.Result is not { } snapshot) return false;
+
+        _narrativeCache = (location.StorageKey, narrativesTask.Result);
+        Apply(snapshot, narrativesTask.Result);
+        if (environmentTask.Result is { } environment)
+        {
+            EnvironmentalData = environment;
+            ApplyEnvironmentalSummary(environment);
+        }
+        var (nearTides, tideSnapshot) = tidesTask.Result;
+        TideVisibility = nearTides ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
+        if (tideSnapshot is not null) ApplyTides(tideSnapshot);
+        else if (!nearTides) TideStationName = "No nearby tide station";
+        return true;
+    }
 
     [RelayCommand]
     public async Task LoadAsync()
     {
         _loadCts?.Cancel();
         _loadCts = new();
+        var ct = _loadCts.Token;
+        var generation = ++_loadGeneration;
+        var location = CurrentLocation;
         IsBusy = true;
-        Status = "Updating…";
         try
         {
-            var snapshot = await _weather.GetWeatherAsync(CurrentLocation, Metric, _loadCts.Token);
-            IReadOnlyDictionary<DateOnly, string> narratives = new Dictionary<DateOnly, string>();
-            try { narratives = await _narratives.GetDailyNarrativesAsync(CurrentLocation, _loadCts.Token); } catch { }
-            Apply(snapshot, narratives);
-            try
+            // The providers are independent. Start them together so the slowest one,
+            // not the sum of all of them, sets the refresh time, and apply each result
+            // as soon as it lands.
+            var weatherTask = _weather.GetWeatherAsync(location, Metric, ct);
+            var narrativesTask = GetNarrativesAsync(location, ct);
+            var environmentTask = LoadEnvironmentAsync(location, ct);
+            var tidesTask = LoadTidesAsync(location, ct);
+            var alertsTask = LoadAlertsAsync(location, ct);
+
+            var snapshot = await weatherTask;
+            if (ct.IsCancellationRequested) return;
+            var knownNarratives = narrativesTask.IsCompletedSuccessfully ? narrativesTask.Result
+                : _narrativeCache.LocationKey == location.StorageKey ? _narrativeCache.Values
+                : new Dictionary<DateOnly, string>();
+            Apply(snapshot, knownNarratives);
+
+            var narratives = await narrativesTask;
+            if (ct.IsCancellationRequested) return;
+            if (narratives.Count > 0 && !ReferenceEquals(narratives, knownNarratives))
             {
-                EnvironmentalData = await _environment.GetAsync(CurrentLocation, _loadCts.Token);
-                ApplyEnvironmentalSummary(EnvironmentalData);
+                _narrativeCache = (location.StorageKey, narratives);
+                Apply(snapshot, narratives);
             }
-            catch { EnvironmentalData = null; }
-            try
-            {
-                await LoadTideStationCatalogAsync(_loadCts.Token);
-                var nearTides = TideStationId is not null || await _tides.IsNearStationAsync(CurrentLocation, 180, _loadCts.Token);
-                TideVisibility = nearTides ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
-                if (nearTides) ApplyTides(await _tides.GetAsync(CurrentLocation, TideStationId, _loadCts.Token));
-                else { _latestTideSnapshot = null; TidePredictions.Clear(); TideStationName = "No nearby tide station"; }
-            }
-            catch { TideVisibility = Microsoft.UI.Xaml.Visibility.Collapsed; TideStationName = "Tide predictions unavailable"; TidePredictions.Clear(); }
-            if (_weather.LastResultWasCached) Status = "Weather service temporarily unavailable. Showing the most recently saved forecast.";
-            try
-            {
-                Replace(Alerts, await _alerts.GetActiveAsync(CurrentLocation, _loadCts.Token));
-                AlertHeadline = Alerts.FirstOrDefault() is { } alert ? $"{alert.Event}: {alert.Headline}" : "";
-                OnPropertyChanged(nameof(HasAlerts));
-            }
-            catch { Status = "Forecast updated; alerts are temporarily unavailable."; }
-            if (Status == "Updating…") Status = "";
+
+            var alertsAvailable = await alertsTask;
+            await Task.WhenAll(environmentTask, tidesTask);
+            if (ct.IsCancellationRequested) return;
+            Status = _weather.LastResultWasCached ? "Weather service temporarily unavailable. Showing the most recently saved forecast."
+                : alertsAvailable ? ""
+                : "Forecast updated; alerts are temporarily unavailable.";
         }
         catch (OperationCanceledException) { }
-        catch (Exception ex) { Status = $"Couldn’t refresh. {Friendly(ex)}"; }
-        finally { IsBusy = false; }
+        catch (Exception ex) when (!ct.IsCancellationRequested) { Status = $"Couldn’t refresh. {Friendly(ex)}"; }
+        catch { }
+        finally
+        {
+            // A newer load (for example a location change) owns the busy state now.
+            if (generation == _loadGeneration) IsBusy = false;
+        }
     }
+
+    private async Task<IReadOnlyDictionary<DateOnly, string>> GetNarrativesAsync(LocationResult location, CancellationToken ct)
+    {
+        try { return await _narratives.GetDailyNarrativesAsync(location, ct); }
+        catch { return new Dictionary<DateOnly, string>(); }
+    }
+
+    private async Task LoadEnvironmentAsync(LocationResult location, CancellationToken ct)
+    {
+        try
+        {
+            var data = await _environment.GetAsync(location, ct);
+            if (ct.IsCancellationRequested) return;
+            EnvironmentalData = data;
+            ApplyEnvironmentalSummary(data);
+        }
+        catch { if (!ct.IsCancellationRequested) EnvironmentalData = null; }
+    }
+
+    private async Task LoadTidesAsync(LocationResult location, CancellationToken ct)
+    {
+        try
+        {
+            await LoadTideStationCatalogAsync(ct);
+            var stationId = TideStationId;
+            var nearTides = stationId is not null || await _tides.IsNearStationAsync(location, 180, ct);
+            if (ct.IsCancellationRequested) return;
+            if (nearTides)
+            {
+                var snapshot = await _tides.GetAsync(location, stationId, ct);
+                if (ct.IsCancellationRequested) return;
+                TideVisibility = Microsoft.UI.Xaml.Visibility.Visible;
+                ApplyTides(snapshot);
+            }
+            else
+            {
+                TideVisibility = Microsoft.UI.Xaml.Visibility.Collapsed;
+                _latestTideSnapshot = null;
+                TidePredictions.Clear();
+                TideStationName = "No nearby tide station";
+            }
+        }
+        catch when (!ct.IsCancellationRequested)
+        {
+            TideVisibility = Microsoft.UI.Xaml.Visibility.Collapsed;
+            TideStationName = "Tide predictions unavailable";
+            TidePredictions.Clear();
+        }
+        catch { }
+    }
+
+    private async Task<bool> LoadAlertsAsync(LocationResult location, CancellationToken ct)
+    {
+        try
+        {
+            var alerts = await _alerts.GetActiveAsync(location, ct);
+            if (ct.IsCancellationRequested) return true;
+            Replace(Alerts, alerts);
+            AlertHeadline = Alerts.FirstOrDefault() is { } alert ? $"{alert.Event}: {alert.Headline}" : "";
+            OnPropertyChanged(nameof(HasAlerts));
+            return true;
+        }
+        catch { return ct.IsCancellationRequested; }
+    }
+
+    public Task RememberAutomaticLocationAsync(LocationResult location) =>
+        _settings.SaveAsync(_settings.Current with { LastAutomaticLocation = location });
 
     [RelayCommand]
     private async Task SearchAsync()
@@ -294,7 +409,7 @@ public partial class MainViewModel : ObservableObject
     {
         if (_tideStationCatalogLoaded) return;
         var stations = await _tides.GetStationsAsync(ct);
-        ApplyTideStationChoices(stations);
+        await ApplyTideStationChoicesAsync(stations);
         ApplyTideCatalogStatus();
         _tideStationCatalogLoaded = true;
     }
@@ -302,17 +417,19 @@ public partial class MainViewModel : ObservableObject
     public async Task RefreshTideStationCatalogAsync(CancellationToken ct = default)
     {
         var stations = await _tides.RefreshStationsAsync(ct);
-        ApplyTideStationChoices(stations);
+        await ApplyTideStationChoicesAsync(stations);
         ApplyTideCatalogStatus();
         ApplyTides(await _tides.GetAsync(CurrentLocation, TideStationId, ct));
     }
 
-    private void ApplyTideStationChoices(IReadOnlyList<TideStation> stations)
+    private async Task ApplyTideStationChoicesAsync(IReadOnlyList<TideStation> stations)
     {
-        TideStationChoices.Clear();
-        TideStationChoices.Add(new(null, "Automatic — nearest station"));
-        foreach (var station in stations.OrderBy(item => item.State).ThenBy(item => item.Name))
-            TideStationChoices.Add(new(station.Id, station.DisplayName));
+        // Keep the current "Automatic — <station>" label so the picker doesn't flicker.
+        var automaticLabel = TideStationChoices.Count > 0 ? TideStationChoices[0].DisplayName : "Automatic — nearest station";
+        TideStationChoices = await Task.Run(() => new ObservableCollection<TideStationChoice>(
+            stations.OrderBy(item => item.State).ThenBy(item => item.Name)
+                .Select(station => new TideStationChoice(station.Id, station.DisplayName))
+                .Prepend(new TideStationChoice(null, automaticLabel))));
     }
 
     private void ApplyTideCatalogStatus()
@@ -402,8 +519,8 @@ public partial class MainViewModel : ObservableObject
         Temperature = $"{s.Current.Temperature:0}{degree}";
         Condition = WeatherCode.Description(s.Current.WeatherCode);
         ConditionGlyph = WeatherCode.Glyph(s.Current.WeatherCode, s.Current.IsDay);
-        HeroArtwork = ForecastArtwork(s.Current.WeatherCode, s.Current.IsDay, time: s.Current.UpdatedAt);
-        HeroArtworkUnderlay = ForecastArtwork(s.Current.WeatherCode, s.Current.IsDay, underlay: true, time: s.Current.UpdatedAt);
+        HeroArtwork = ForecastArtwork("hero", s.Current.WeatherCode, s.Current.IsDay, time: s.Current.UpdatedAt);
+        HeroArtworkUnderlay = ForecastArtwork("hero", s.Current.WeatherCode, s.Current.IsDay, underlay: true, time: s.Current.UpdatedAt);
         HeroArtworkVisibility = HeroArtwork is null ? Microsoft.UI.Xaml.Visibility.Collapsed : Microsoft.UI.Xaml.Visibility.Visible;
         ConditionGlyphVisibility = HeroArtwork is null ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
         FeelsLike = $"Feels like {s.Current.FeelsLike:0}{degree}";
@@ -413,7 +530,7 @@ public partial class MainViewModel : ObservableObject
             : Condition;
         ForecastSummary = s.Daily.Count > 0 && narratives.TryGetValue(DateOnly.FromDateTime(s.Daily[0].Date), out var todayNarrative) ? todayNarrative : fallbackSummary;
         ApplyHeroPalette(s.Current.WeatherCode, s.Current.IsDay);
-        Updated = $"Updated {s.Current.UpdatedAt:t}";
+        Updated = s.Current.UpdatedAt.Date == DateTime.Today ? $"Updated {s.Current.UpdatedAt:t}" : $"Updated {s.Current.UpdatedAt:ddd h:mm tt}";
         Humidity = $"{s.Current.Humidity:0}%";
         DewPoint = $"{s.Current.DewPoint:0}{degree}";
         var (windFactor, windLabel) = WindConversion();
@@ -434,14 +551,20 @@ public partial class MainViewModel : ObservableObject
             x.Temperature <= (Metric ? 3 : 37));
         Replace(HourlyTrend, s.Hourly.Select(x => new HourlyTrendPoint(x.Time, x.DewPoint ?? x.Temperature, x.PrecipitationProbability, x.WeatherCode)));
         var forecastDate = s.Current.UpdatedAt.Date;
-        Replace(Hours, s.Hourly.Select(x => new HourlyItem(x.Time, x.Time.ToString(x.Time.Date == forecastDate ? "h tt" : "ddd h tt"), WeatherCode.Glyph(x.WeatherCode), WeatherCode.Description(x.WeatherCode), $"{x.Temperature:0}{degree}", $"{x.PrecipitationProbability}%", x.DewPoint is double dewPoint ? $"{dewPoint:0}{degree}" : "—", ForecastTint(x.WeatherCode, x.Time.Hour is >= 7 and < 19), ForecastArtwork(x.WeatherCode, x.Time.Hour is >= 7 and < 19, time: x.Time), ForecastArtwork(x.WeatherCode, x.Time.Hour is >= 7 and < 19, underlay: true, time: x.Time))));
-        Replace(Days, s.Daily.Select((x, i) => new DailyItem(
+        // A saved forecast painted at launch can be a few hours old; drop periods
+        // that have already passed so the cards match what the refresh will show.
+        var hourly = s.Hourly.Where(x => x.Time >= DateTime.Now.AddHours(-1)).ToList();
+        if (hourly.Count == 0) hourly = s.Hourly.ToList();
+        var daily = s.Daily.Where(x => x.Date.Date >= DateTime.Today).ToList();
+        if (daily.Count == 0) daily = s.Daily.ToList();
+        Replace(Hours, hourly.Select(x => new HourlyItem(x.Time, x.Time.ToString(x.Time.Date == forecastDate ? "h tt" : "ddd h tt"), WeatherCode.Glyph(x.WeatherCode), WeatherCode.Description(x.WeatherCode), $"{x.Temperature:0}{degree}", $"{x.PrecipitationProbability}%", x.DewPoint is double dewPoint ? $"{dewPoint:0}{degree}" : "—", ForecastTint(x.WeatherCode, x.Time.Hour is >= 7 and < 19), ForecastArtwork("hourly", x.WeatherCode, x.Time.Hour is >= 7 and < 19, time: x.Time), ForecastArtwork("hourly", x.WeatherCode, x.Time.Hour is >= 7 and < 19, underlay: true, time: x.Time))));
+        Replace(Days, daily.Select((x, i) => new DailyItem(
             i == 0 ? "Today" : x.Date.ToString("ddd"), x.Date.ToString("dddd, MMMM d"),
             WeatherCode.Glyph(x.WeatherCode), WeatherCode.Description(x.WeatherCode),
             $"{x.High:0}{degree}", $"{x.Low:0}{degree}", $"{x.PrecipitationProbability}%", ForecastTint(x.WeatherCode, true),
             x.Sunrise.ToString("t"), x.Sunset.ToString("t"),
             narratives.TryGetValue(DateOnly.FromDateTime(x.Date), out var narrative) ? narrative : $"{WeatherCode.Description(x.WeatherCode)} with a high near {x.High:0}{degree} and a low near {x.Low:0}{degree}. The chance of precipitation is {x.PrecipitationProbability}%.",
-            ForecastArtwork(x.WeatherCode, true, time: x.Date), ForecastArtwork(x.WeatherCode, true, underlay: true, time: x.Date))));
+            ForecastArtwork("daily", x.WeatherCode, true, time: x.Date), ForecastArtwork("daily", x.WeatherCode, true, underlay: true, time: x.Date))));
     }
 
     private void ApplyMoonPhase()
@@ -667,7 +790,12 @@ public partial class MainViewModel : ObservableObject
         return Windows.UI.Color.FromArgb(25, (byte)r, (byte)g, (byte)b);
     }
 
-    private static Microsoft.UI.Xaml.Media.Imaging.SvgImageSource? ForecastArtwork(int code, bool isDay, bool underlay = false, DateTime? time = null)
+    /// <param name="usage">
+    /// Which surface the artwork is drawn on. Sources are shared only between images of the
+    /// same size, so each SVG is rasterized once per size and reused across refreshes
+    /// instead of blanking and re-decoding every time the forecast updates.
+    /// </param>
+    private static Microsoft.UI.Xaml.Media.Imaging.SvgImageSource? ForecastArtwork(string usage, int code, bool isDay, bool underlay = false, DateTime? time = null)
     {
         var nearFullMoon = !isDay && IsNearFullMoon(time ?? DateTime.Now);
         var fileName = code switch
@@ -688,12 +816,12 @@ public partial class MainViewModel : ObservableObject
             _ => null
         };
 
-        return fileName is null
-            ? null
-            : new Microsoft.UI.Xaml.Media.Imaging.SvgImageSource
-            {
-                UriSource = new Uri($"ms-appx:///Assets/weather/{(underlay ? "condition-underlays" : "conditions")}/{fileName}")
-            };
+        if (fileName is null) return null;
+        var uri = $"ms-appx:///Assets/weather/{(underlay ? "condition-underlays" : "conditions")}/{fileName}";
+        var key = $"{usage}|{uri}";
+        if (!ArtworkCache.TryGetValue(key, out var source))
+            ArtworkCache[key] = source = new Microsoft.UI.Xaml.Media.Imaging.SvgImageSource { UriSource = new Uri(uri) };
+        return source;
     }
 
     private static bool IsNearFullMoon(DateTime time)
@@ -704,7 +832,20 @@ public partial class MainViewModel : ObservableObject
         return Math.Abs(phase - .5) <= 2.25 / lunarCycleDays;
     }
 
-    private static void Replace<T>(ObservableCollection<T> target, IEnumerable<T> values) { target.Clear(); foreach (var item in values) target.Add(item); }
+    /// <summary>
+    /// Updates a bound collection in place: unchanged items stay put, so their cards are not
+    /// torn down and rebuilt (which made every refresh flash).
+    /// </summary>
+    private static void Replace<T>(ObservableCollection<T> target, IEnumerable<T> values)
+    {
+        var items = values as IList<T> ?? values.ToList();
+        for (var index = 0; index < items.Count; index++)
+        {
+            if (index >= target.Count) target.Add(items[index]);
+            else if (!EqualityComparer<T>.Default.Equals(target[index], items[index])) target[index] = items[index];
+        }
+        while (target.Count > items.Count) target.RemoveAt(target.Count - 1);
+    }
     private static bool SameLocation(LocationResult a, LocationResult b) => Math.Abs(a.Latitude - b.Latitude) < .001 && Math.Abs(a.Longitude - b.Longitude) < .001;
     private (double Factor, string Label) WindConversion()
     {

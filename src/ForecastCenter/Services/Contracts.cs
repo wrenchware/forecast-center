@@ -16,6 +16,9 @@ public sealed record AppSettings
     public string WindUnit { get; init; } = "Auto";
     public string PressureUnit { get; init; } = "Auto";
     public bool AutomaticLocation { get; init; }
+    // Last position Windows reported, used to paint the dashboard at launch while
+    // a fresh geolocation request runs in the background.
+    public LocationResult? LastAutomaticLocation { get; init; }
     public bool StartWithWindows { get; init; }
     public LocationResult DefaultLocation { get; init; } = new("New York", "New York", "United States", 40.7128, -74.0060);
     public List<LocationResult> SavedLocations { get; init; } = [new("New York", "New York", "United States", 40.7128, -74.0060)];
