@@ -31,25 +31,25 @@ There are no accounts, ads, analytics, tracking SDKs, or backend services.
 
 ## Install
 
-The easiest installation method is WinGet:
+Install Forecast Center from the [Microsoft Store](https://apps.microsoft.com/detail/9NCKT4BX2BM7), or get the same signed Store package with WinGet:
 
 ```powershell
-winget install --id Wrenchware.ForecastCenter --exact
+winget install --id 9NCKT4BX2BM7 --source msstore
 ```
 
-To upgrade later:
+The Microsoft Store signs this package and keeps it up to date automatically.
+
+### Existing installer-based installs
+
+If you installed with `Wrenchware.ForecastCenter` or a setup `.exe`, you can keep upgrading that install:
 
 ```powershell
 winget upgrade --id Wrenchware.ForecastCenter --exact
 ```
 
-The same installer can be downloaded manually from [GitHub Releases](https://github.com/wrenchware/forecast-center/releases). Installing a newer version preserves settings and saved locations.
+That package uses the x64, per-user installer attached to [GitHub Releases](https://github.com/wrenchware/forecast-center/releases). The installer is not code-signed, so Windows may show a SmartScreen warning. Installing a newer version preserves settings and saved locations. These installs check once a day for a newer stable release, and you can check manually from Settings > About; downloads open the corresponding GitHub release page.
 
-Forecast Center checks once a day for a newer stable release. Update checks can also be run manually from Settings > About; downloads open the corresponding GitHub release page.
-
-A copy of the accepted WinGet community manifest is maintained under `winget/`. Current unsigned installers may still trigger a Windows SmartScreen confirmation.
-
-This is currently an x64, per-user installer. Windows may show a SmartScreen warning because the installer is not code-signed.
+A copy of the accepted WinGet community manifest is maintained under `winget/`.
 
 ## Weather data
 
@@ -108,6 +108,6 @@ Release publishes are ReadyToRun-compiled for faster launch. The project copies 
 ## Current limitations
 
 - Radar and live weather providers need an internet connection.
-- The current installer is not code-signed and there is no MSIX package yet.
+- The setup `.exe` on GitHub Releases is not code-signed. The Microsoft Store package is signed.
 
 See [CHANGELOG.md](CHANGELOG.md) for release history.
