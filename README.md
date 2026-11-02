@@ -4,6 +4,8 @@ Forecast Center is an open-source, ad-free weather app for Windows 11. It offers
 
 It is written in C# with WinUI 3. The radar uses Leaflet inside WebView2.
 
+<a href="https://apps.microsoft.com/detail/9NCKT4BX2BM7?mode=direct"><img src="https://get.microsoft.com/images/en-us%20dark.svg" width="200" alt="Get Forecast Center from the Microsoft Store"/></a>
+
 [![Forecast Center dashboard in dark mode](docs/screenshots/dashboard-dark.png)](docs/screenshots/dashboard-dark.png)
 
 ## Features
@@ -31,7 +33,9 @@ There are no accounts, ads, analytics, tracking SDKs, or backend services.
 
 ## Install
 
-Install Forecast Center from the [Microsoft Store](https://apps.microsoft.com/detail/9NCKT4BX2BM7), or get the same signed Store package with WinGet:
+<a href="https://apps.microsoft.com/detail/9NCKT4BX2BM7?mode=direct"><img src="https://get.microsoft.com/images/en-us%20dark.svg" width="200" alt="Get Forecast Center from the Microsoft Store"/></a>
+
+Or get the same signed Store package with WinGet:
 
 ```powershell
 winget install --id 9NCKT4BX2BM7 --source msstore
