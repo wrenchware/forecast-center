@@ -2,6 +2,14 @@
 
 Notable user-facing changes to Forecast Center are recorded here. GitHub Releases contain matching downloadable installer notes.
 
+## 1.0.5 - 2026-11-09
+
+### Fixed
+
+- Fixed the window opening too small on high-resolution displays that use Windows scaling above 100%.
+- Removed the oversized empty space above the dashboard on scaled displays.
+- Weather details such as sunrise and sunset now wrap instead of being cut off in narrower windows.
+
 ## 1.0.4 - 2026-10-22
 
 ### Fixed
