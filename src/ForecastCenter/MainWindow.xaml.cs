@@ -142,10 +142,6 @@ public sealed partial class MainWindow : Window
             appWindow.TitleBar.InactiveBackgroundColor = Colors.Transparent;
             appWindow.TitleBar.ButtonBackgroundColor = Colors.Transparent;
             appWindow.TitleBar.ButtonInactiveBackgroundColor = Colors.Transparent;
-            var nativeTitleBarHeight = appWindow.TitleBar.Height;
-            TitleBarRow.Height = new GridLength(nativeTitleBarHeight);
-            TitleBarDragRegion.Height = nativeTitleBarHeight;
-            TitleBarDragRegion.Padding = new Thickness(12, 0, appWindow.TitleBar.RightInset + 12, 0);
         }
         RestoreWindowState();
         appWindow.Changed += AppWindow_Changed;
@@ -172,29 +168,36 @@ public sealed partial class MainWindow : Window
 
     private void RestoreWindowState()
     {
-        var hasSavedState = File.Exists(_windowStatePath);
-        var state = new WindowState();
+        WindowState? saved = null;
         try
         {
-            if (hasSavedState)
-                state = JsonSerializer.Deserialize<WindowState>(File.ReadAllText(_windowStatePath)) ?? new();
+            if (File.Exists(_windowStatePath))
+                saved = JsonSerializer.Deserialize<WindowState>(File.ReadAllText(_windowStatePath));
         }
         catch { }
 
+        // AppWindow works in physical pixels but the layout is designed in
+        // effective pixels, so sizes the app picks must follow the display scale.
+        var scale = Math.Max(1d, GetDpiForWindow(WindowNative.GetWindowHandle(this)) / 96d);
+        int ToPhysical(int effectivePixels) => (int)Math.Round(effectivePixels * scale);
+
         var displayArea = DisplayArea.GetFromWindowId(_appWindow.Id, DisplayAreaFallback.Primary);
         var workArea = displayArea.WorkArea;
-        var maximumWidth = Math.Max(1, Math.Min(3840, workArea.Width - 64));
-        var maximumHeight = Math.Max(1, Math.Min(2160, workArea.Height - 48));
-        var minimumWidth = Math.Min(720, maximumWidth);
-        var minimumHeight = Math.Min(540, maximumHeight);
-        var width = Math.Clamp(state.Width, minimumWidth, maximumWidth);
-        var height = Math.Clamp(state.Height, minimumHeight, maximumHeight);
+        var firstLaunch = new WindowState();
+        var preferredWidth = saved?.Width ?? ToPhysical(firstLaunch.Width);
+        var preferredHeight = saved?.Height ?? ToPhysical(firstLaunch.Height);
+        var maximumWidth = Math.Max(1, workArea.Width - 64);
+        var maximumHeight = Math.Max(1, workArea.Height - 48);
+        var minimumWidth = Math.Min(ToPhysical(720), maximumWidth);
+        var minimumHeight = Math.Min(ToPhysical(540), maximumHeight);
+        var width = Math.Clamp(preferredWidth, minimumWidth, maximumWidth);
+        var height = Math.Clamp(preferredHeight, minimumHeight, maximumHeight);
         _lastRestoredWindowSize = new Windows.Graphics.SizeInt32(width, height);
 
         // Center the preferred first-launch size. Returning users keep the
         // normal Windows placement unless their saved size no longer fits the
         // current monitor, in which case center the safely constrained window.
-        if (!hasSavedState || width != state.Width || height != state.Height)
+        if (saved is null || width != preferredWidth || height != preferredHeight)
         {
             var x = workArea.X + Math.Max(0, (workArea.Width - width) / 2);
             var y = workArea.Y + Math.Max(0, (workArea.Height - height) / 2);
@@ -204,7 +207,7 @@ public sealed partial class MainWindow : Window
         {
             _appWindow.Resize(_lastRestoredWindowSize);
         }
-        if (state.Maximized && _appWindow.Presenter is OverlappedPresenter presenter) presenter.Maximize();
+        if (saved?.Maximized == true && _appWindow.Presenter is OverlappedPresenter presenter) presenter.Maximize();
     }
 
     private void AppWindow_Changed(AppWindow sender, AppWindowChangedEventArgs args)
@@ -2032,6 +2035,8 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    [DllImport("user32.dll")]
+    private static extern uint GetDpiForWindow(nint hwnd);
     [DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(nint hwnd, int attribute, ref int value, int valueSize);
     [DllImport("user32.dll", SetLastError = true)]
