@@ -51,16 +51,19 @@ public sealed partial class MainWindow : Window
     private int _forecastBaseCardWidth = 120;
     private int _forecastExtraPixelCards;
     private int _forecastPageWidth = 120;
-    private RadioButtons? _themeRadio;
+    private ComboBox? _themePicker;
+    private ComboBox? _unitsPicker;
+    private int _settingsTabIndex;
+    private bool _suppressSettingsTabAnimation;
     private ComboBox? _tideStationPicker;
-    private CheckBox? _minimizeToTrayCheckBox;
+    private ToggleSwitch? _minimizeToTrayToggle;
     private bool _updatingLocationPicker;
-    private CheckBox? _startWithWindowsCheckBox;
+    private ToggleSwitch? _startWithWindowsToggle;
     private ComboBox? _windUnitPicker;
     private ComboBox? _pressureUnitPicker;
     private ComboBox? _refreshFrequencyPicker;
     private readonly WindowsLocationService _windowsLocationService = new();
-    private CheckBox? _globalTideStationCheckBox;
+    private ToggleSwitch? _globalTideStationToggle;
     private FrameworkElement? _downloadedDataSettingsSection;
     private TextBlock? _weatherCacheStatusText;
     private TextBlock? _radarCacheStatusText;
@@ -131,6 +134,7 @@ public sealed partial class MainWindow : Window
         Title = "Forecast Center";
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(TitleBarDragRegion);
+        InitializeBackNavigation();
         SystemBackdrop = MicaController.IsSupported() ? new MicaBackdrop { Kind = MicaKind.Base } : null;
         var windowHandle = WindowNative.GetWindowHandle(this);
         var appWindow = AppWindow.GetFromWindowId(Win32Interop.GetWindowIdFromWindow(windowHandle));
@@ -732,34 +736,78 @@ public sealed partial class MainWindow : Window
         ShowPage(SettingsPage);
         var item = SettingsNav.MenuItems.OfType<NavigationViewItem>()
             .FirstOrDefault(candidate => string.Equals(candidate.Tag as string, section, StringComparison.Ordinal));
-        if (item is not null) SettingsNav.SelectedItem = item;
+        // Opening Settings already plays the rise; starting it again for the tab would restart it mid-motion.
+        _suppressSettingsTabAnimation = true;
+        try { if (item is not null) SettingsNav.SelectedItem = item; }
+        finally { _suppressSettingsTabAnimation = false; }
     }
-    private void BackToWeather_Click(object sender, RoutedEventArgs e)
-    {
-        RefreshLocationPicker();
-        ShowPage(WeatherPage);
-    }
-
     private void ShowPage(FrameworkElement page)
     {
         foreach (var other in new FrameworkElement[] { WeatherPage, RadarPage, AlertsPage, SettingsPage })
             if (!ReferenceEquals(other, page)) other.Visibility = Visibility.Collapsed;
         page.Visibility = Visibility.Visible;
+        var onDashboard = ReferenceEquals(page, WeatherPage);
+        TitleBarBackButton.Visibility = onDashboard ? Visibility.Collapsed : Visibility.Visible;
+        // The drag region swallows clicks, so pull it clear of the back button while it shows.
+        TitleBarDragRegion.Margin = new Thickness(onDashboard ? 0 : 56, 0, 0, 0);
         AnimatePageEntrance(page);
     }
+
+    private bool IsOnDashboard => WeatherPage.Visibility == Visibility.Visible;
+
+    private void GoBackToDashboard()
+    {
+        if (IsOnDashboard) return;
+        if (SettingsPage.Visibility == Visibility.Visible) ResetSettingsToGeneral();
+        RefreshLocationPicker();
+        ShowPage(WeatherPage);
+    }
+
+    private void TitleBarBack_Click(object sender, RoutedEventArgs e) => GoBackToDashboard();
+
+    /// <summary>Alt+Left, Escape and the mouse back button return to the dashboard, as in other Windows apps.</summary>
+    private void InitializeBackNavigation()
+    {
+        void AddAccelerator(Windows.System.VirtualKey key, Windows.System.VirtualKeyModifiers modifiers)
+        {
+            var accelerator = new KeyboardAccelerator { Key = key, Modifiers = modifiers };
+            accelerator.Invoked += (_, args) =>
+            {
+                if (!CanNavigateBack()) return;
+                // Escape in the location search box belongs to the text box, not the page.
+                if (key == Windows.System.VirtualKey.Escape && FocusManager.GetFocusedElement(RootGrid.XamlRoot) is TextBox) return;
+                args.Handled = true;
+                GoBackToDashboard();
+            };
+            RootGrid.KeyboardAccelerators.Add(accelerator);
+        }
+        AddAccelerator(Windows.System.VirtualKey.Left, Windows.System.VirtualKeyModifiers.Menu);
+        AddAccelerator(Windows.System.VirtualKey.GoBack, Windows.System.VirtualKeyModifiers.None);
+        AddAccelerator(Windows.System.VirtualKey.Escape, Windows.System.VirtualKeyModifiers.None);
+        RootGrid.KeyboardAcceleratorPlacementMode = KeyboardAcceleratorPlacementMode.Hidden;
+        RootGrid.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler((_, e) =>
+        {
+            if (!e.GetCurrentPoint(RootGrid).Properties.IsXButton1Pressed || !CanNavigateBack()) return;
+            e.Handled = true;
+            GoBackToDashboard();
+        }), handledEventsToo: true);
+    }
+
+    /// <summary>
+    /// Back shortcuts only act on the page itself: an open dialog, dropdown or flyout gets the
+    /// key (Escape closes it) and the page underneath stays put.
+    /// </summary>
+    private bool CanNavigateBack() =>
+        !IsOnDashboard
+        && RootGrid.XamlRoot is { } root
+        && !VisualTreeHelper.GetOpenPopupsForXamlRoot(root).Any(popup => popup.Child is not ToolTip);
 
     /// <summary>Settings controls are built on first open, keeping them off the launch path.</summary>
     private void EnsureSettingsUi()
     {
         if (_settingsUiBuilt) return;
         _settingsUiBuilt = true;
-        UnitsRadio.SelectedIndex = ViewModel.Metric ? 1 : 0;
         InitializeThemeSettings();
-    }
-    private void SettingsDashboard_Click(object sender, RoutedEventArgs e)
-    {
-        ResetSettingsToGeneral();
-        BackToWeather_Click(sender, e);
     }
     private async void SetDefaultLocation_Click(object sender, RoutedEventArgs e)
     {
@@ -776,6 +824,20 @@ public sealed partial class MainWindow : Window
         {
             visual.Opacity = 1;
             visual.Offset = Vector3.Zero;
+            if (ReferenceEquals(page, SettingsPage)) RiseInSettingsContent();
+            return;
+        }
+        if (ReferenceEquals(page, SettingsPage))
+        {
+            // Settings opens like a Windows Settings page: the title and tabs fade in place
+            // and only the content rises from below.
+            visual.Offset = Vector3.Zero;
+            visual.Opacity = 0;
+            var quickFade = visual.Compositor.CreateScalarKeyFrameAnimation();
+            quickFade.InsertKeyFrame(1, 1, visual.Compositor.CreateLinearEasingFunction());
+            quickFade.Duration = TimeSpan.FromMilliseconds(150);
+            visual.StartAnimation(nameof(visual.Opacity), quickFade);
+            RiseInSettingsContent();
             return;
         }
 
@@ -1356,52 +1418,121 @@ public sealed partial class MainWindow : Window
     {
         if (sender is Button { Tag: string storageKey }) { await ViewModel.RemoveSavedLocationAsync(storageKey); RefreshLocationPicker(); }
     }
-    private async void UnitsRadio_SelectionChanged(object sender, SelectionChangedEventArgs e) { if (_initialized && UnitsRadio.SelectedIndex >= 0 && (UnitsRadio.SelectedIndex == 1) != ViewModel.Metric) await ViewModel.SetMetricAsync(UnitsRadio.SelectedIndex == 1); }
+    private async void UnitsPicker_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_initialized || _unitsPicker?.SelectedItem is not ComboBoxItem { Tag: string unit }) return;
+        var metric = unit == "C";
+        if (metric != ViewModel.Metric) await ViewModel.SetMetricAsync(metric);
+    }
 
     private void InitializeThemeSettings()
     {
-        _themeRadio = new RadioButtons();
-        _themeRadio.MaxColumns = 3;
-        _themeRadio.Items.Add("System");
-        _themeRadio.Items.Add("Light");
-        _themeRadio.Items.Add("Dark");
-        _themeRadio.SelectedIndex = ViewModel.Theme.ToLowerInvariant() switch { "light" => 1, "dark" => 2, _ => 0 };
-        _themeRadio.SelectionChanged += ThemeRadio_SelectionChanged;
-        ThemeSettingsHost.Children.Add(_themeRadio);
-        _minimizeToTrayCheckBox = new CheckBox { Content = "Minimize to system tray", IsChecked = ViewModel.MinimizeToTray };
-        _minimizeToTrayCheckBox.Checked += MinimizeToTrayCheckBox_Changed;
-        _minimizeToTrayCheckBox.Unchecked += MinimizeToTrayCheckBox_Changed;
-
-        _windUnitPicker = CreateTaggedPicker("Wind speed", [("Automatic", "Auto"), ("Miles per hour", "mph"), ("Kilometers per hour", "km/h"), ("Knots", "kn")], ViewModel.WindUnit);
-        _pressureUnitPicker = CreateTaggedPicker("Pressure", [("Automatic", "Auto"), ("Hectopascals", "hPa"), ("Inches of mercury", "inHg"), ("Millimeters of mercury", "mmHg")], ViewModel.PressureUnit);
+        // General
+        _themePicker = CreateTaggedPicker([("Use system setting", "System"), ("Light", "Light"), ("Dark", "Dark")], ViewModel.Theme);
+        _themePicker.SelectionChanged += ThemePicker_SelectionChanged;
+        _unitsPicker = CreateTaggedPicker([("Fahrenheit (°F)", "F"), ("Celsius (°C)", "C")], ViewModel.Metric ? "C" : "F");
+        _unitsPicker.SelectionChanged += UnitsPicker_SelectionChanged;
+        _windUnitPicker = CreateTaggedPicker([("Automatic", "Auto"), ("Miles per hour", "mph"), ("Kilometers per hour", "km/h"), ("Knots", "kn")], ViewModel.WindUnit);
+        _pressureUnitPicker = CreateTaggedPicker([("Automatic", "Auto"), ("Hectopascals", "hPa"), ("Inches of mercury", "inHg"), ("Millimeters of mercury", "mmHg")], ViewModel.PressureUnit);
         _windUnitPicker.SelectionChanged += MeasurementPicker_SelectionChanged;
         _pressureUnitPicker.SelectionChanged += MeasurementPicker_SelectionChanged;
-        MeasurementSettingsHost.Children.Add(_windUnitPicker);
-        MeasurementSettingsHost.Children.Add(_pressureUnitPicker);
-        _refreshFrequencyPicker = CreateTaggedPicker("Refresh frequency", [("Every 5 minutes", "5"), ("Every 10 minutes", "10"), ("Every 15 minutes", "15"), ("Every 30 minutes", "30"), ("Every 60 minutes", "60")], ViewModel.RefreshMinutes.ToString());
+        _refreshFrequencyPicker = CreateTaggedPicker([("Every 5 minutes", "5"), ("Every 10 minutes", "10"), ("Every 15 minutes", "15"), ("Every 30 minutes", "30"), ("Every 60 minutes", "60")], ViewModel.RefreshMinutes.ToString());
         _refreshFrequencyPicker.SelectionChanged += RefreshFrequencyPicker_SelectionChanged;
-        _startWithWindowsCheckBox = new CheckBox { Content = "Start Forecast Center with Windows", IsChecked = ViewModel.StartWithWindows };
-        _startWithWindowsCheckBox.Checked += StartWithWindowsCheckBox_Changed;
-        _startWithWindowsCheckBox.Unchecked += StartWithWindowsCheckBox_Changed;
-        _ = SyncPackagedStartupCheckBoxAsync();
-        AppBehaviorSettingsHost.Children.Add(_refreshFrequencyPicker);
-        AppBehaviorSettingsHost.Children.Add(_startWithWindowsCheckBox);
-        AppBehaviorSettingsHost.Children.Add(_minimizeToTrayCheckBox);
-        _globalTideStationCheckBox = new CheckBox { Content = "Use one tide station for every weather location", IsChecked = ViewModel.UseGlobalTideStation };
-        _globalTideStationCheckBox.Checked += GlobalTideStationCheckBox_Changed;
-        _globalTideStationCheckBox.Unchecked += GlobalTideStationCheckBox_Changed;
-        _tideStationPicker = new ComboBox { ItemsSource = ViewModel.TideStationChoices, DisplayMemberPath = nameof(TideStationChoice.DisplayName), HorizontalAlignment = HorizontalAlignment.Stretch };
+        _startWithWindowsToggle = CreateSettingsToggle(ViewModel.StartWithWindows);
+        _startWithWindowsToggle.Toggled += StartWithWindowsToggle_Toggled;
+        _ = SyncPackagedStartupToggleAsync();
+        _minimizeToTrayToggle = CreateSettingsToggle(ViewModel.MinimizeToTray);
+        _minimizeToTrayToggle.Toggled += MinimizeToTrayToggle_Toggled;
+
+        var blue = SettingsIconBrush(0x4A, 0xAD, 0xE8);
+        var amber = SettingsIconBrush(0xF2, 0xB8, 0x4B);
+        var purple = SettingsIconBrush(0xA9, 0x9A, 0xF0);
+        var teal = (Brush)Application.Current.Resources["TideAccentBrush"];
+
+        AddSettingsSection(GeneralSettingsPanel, "Appearance",
+            SettingsRow("\uE771", blue, "App theme", "Follow Windows, or always use light or dark colors.", _themePicker));
+        AddSettingsSection(GeneralSettingsPanel, "Units",
+            SettingsRow("\uE9CA", amber, "Temperature", "Used throughout forecasts and maps.", _unitsPicker),
+            SettingsRow("ms-appx:///Assets/metrics/wind.svg", amber, "Wind speed", "Automatic follows your temperature units.", _windUnitPicker),
+            SettingsRow("ms-appx:///Assets/metrics/pressure.svg", amber, "Pressure", "Automatic follows your temperature units.", _pressureUnitPicker));
+        AddSettingsSection(GeneralSettingsPanel, "App behavior",
+            SettingsRow("\uE72C", purple, "Refresh frequency", "How often new weather is downloaded.", _refreshFrequencyPicker),
+            SettingsRow("\uE7E8", purple, "Start with Windows", "Open Forecast Center when you sign in.", _startWithWindowsToggle),
+            SettingsRow("\uE73F", purple, "Minimize to system tray", "Keep Forecast Center running in the notification area.", _minimizeToTrayToggle));
+
+        // Locations: tides (the rest of the tab is bound in XAML)
+        _globalTideStationToggle = CreateSettingsToggle(ViewModel.UseGlobalTideStation);
+        _globalTideStationToggle.Toggled += GlobalTideStationToggle_Toggled;
+        _tideStationPicker = new ComboBox { ItemsSource = ViewModel.TideStationChoices, DisplayMemberPath = nameof(TideStationChoice.DisplayName), Width = 280, VerticalAlignment = VerticalAlignment.Center };
         _tideStationPicker.SelectedItem = ViewModel.TideStationChoices.FirstOrDefault(choice => choice.Id == ViewModel.TideStationId) ?? ViewModel.TideStationChoices[0];
         _tideStationPicker.SelectionChanged += TideStationPicker_SelectionChanged;
-        TideSettingsHost.Children.Add(_globalTideStationCheckBox);
-        TideSettingsHost.Children.Add(_tideStationPicker);
-        AddDownloadedDataSettings(DownloadedDataSettingsHost);
-        AddAboutSettings(AboutSettingsPanel);
+        TideSettingsHost.Children.Add(SettingsRow("ms-appx:///Assets/metrics/tides.svg", teal, "Tide station", "Automatic picks the nearest NOAA station.", _tideStationPicker));
+        TideSettingsHost.Children.Add(SettingsRow("\uE8EB", teal, "Use one station everywhere", "Keep this tide station for every weather location.", _globalTideStationToggle));
+
+        // Sources & data
+        AddDownloadedDataSettings(SourcesSettingsPanel, blue);
+        AddSettingsSection(SourcesSettingsPanel, "Attribution",
+            SettingsRow("\uE946", teal, "Data sources", "Forecast, environment, and geocoding: Open-Meteo (CC BY 4.0)\nObserved and future radar, U.S. alerts, and tides: NOAA/NWS\nMap: © OpenStreetMap contributors, OpenMapTiles, and OpenFreeMap\nNearby city labels: GeoNames (CC BY 4.0)"));
+
+        AddAboutSettings(AboutSettingsPanel, amber);
     }
 
-    private static ComboBox CreateTaggedPicker(string header, IReadOnlyList<(string Label, string Value)> items, string selectedValue)
+    private static SolidColorBrush SettingsIconBrush(byte r, byte g, byte b) => new(Windows.UI.Color.FromArgb(255, r, g, b));
+
+    private Style SettingsStyle(string key) => (Style)SettingsPage.Resources[key];
+
+    private void AddSettingsSection(Panel panel, string header, params UIElement[] rows)
     {
-        var picker = new ComboBox { Header = header, HorizontalAlignment = HorizontalAlignment.Stretch };
+        var title = new TextBlock { Text = header, Style = SettingsStyle("SettingsSectionHeaderStyle") };
+        panel.Children.Add(title);
+        foreach (var row in rows) panel.Children.Add(row);
+    }
+
+    /// <summary>A Windows 11 style settings row: icon, title and description, with the control on the right.</summary>
+    private Border SettingsRow(string glyph, Brush iconBrush, string title, object? description, FrameworkElement? control = null)
+    {
+        var grid = new Grid { ColumnSpacing = 16 };
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition());
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        // App artwork (ms-appx paths) matches the dashboard; everything else is a Segoe Fluent glyph.
+        // A fixed slot keeps every title lined up whatever the icon.
+        FrameworkElement icon = glyph.StartsWith("ms-appx:", StringComparison.Ordinal)
+            ? new Image { Source = new SvgImageSource(new Uri(glyph)), Width = 20, Height = 20 }
+            : new FontIcon { Glyph = glyph, FontSize = 18, Foreground = iconBrush };
+        grid.Children.Add(new Grid { Width = 20, VerticalAlignment = VerticalAlignment.Center, Children = { icon } });
+
+        var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        text.Children.Add(new TextBlock { Text = title, TextWrapping = TextWrapping.Wrap });
+        if (description is TextBlock live)
+        {
+            live.Style = SettingsStyle("SettingsRowDescriptionStyle");
+            text.Children.Add(live);
+        }
+        else if (description is string words)
+            text.Children.Add(new TextBlock { Text = words, Style = SettingsStyle("SettingsRowDescriptionStyle") });
+        Grid.SetColumn(text, 1);
+        grid.Children.Add(text);
+
+        if (control is not null)
+        {
+            // The row's title is the control's label for Narrator, as a Header used to be.
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(control, title);
+            if (description is string help) Microsoft.UI.Xaml.Automation.AutomationProperties.SetHelpText(control, help);
+            control.VerticalAlignment = VerticalAlignment.Center;
+            Grid.SetColumn(control, 2);
+            grid.Children.Add(control);
+        }
+        return new Border { Style = SettingsStyle("SettingsRowStyle"), Child = grid };
+    }
+
+    private static ToggleSwitch CreateSettingsToggle(bool isOn) =>
+        // Text-free switch, the way Windows Settings shows on/off rows.
+        new() { IsOn = isOn, OnContent = "", OffContent = "", MinWidth = 0 };
+
+    private static ComboBox CreateTaggedPicker(IReadOnlyList<(string Label, string Value)> items, string selectedValue)
+    {
+        var picker = new ComboBox { Width = 200 };
         foreach (var (label, value) in items) picker.Items.Add(new ComboBoxItem { Content = label, Tag = value });
         picker.SelectedItem = picker.Items.OfType<ComboBoxItem>().FirstOrDefault(item => string.Equals(item.Tag as string, selectedValue, StringComparison.OrdinalIgnoreCase)) ?? picker.Items[0];
         return picker;
@@ -1414,20 +1545,62 @@ public sealed partial class MainWindow : Window
         LocationSettingsPage.Visibility = tag == "locations" ? Visibility.Visible : Visibility.Collapsed;
         SourcesSettingsPage.Visibility = tag == "sources" ? Visibility.Visible : Visibility.Collapsed;
         AboutSettingsPage.Visibility = tag == "about" ? Visibility.Visible : Visibility.Collapsed;
+
+        var index = SettingsNav.MenuItems.IndexOf(args.SelectedItemContainer);
+        var previous = _settingsTabIndex;
+        _settingsTabIndex = index;
+        if (!_suppressSettingsTabAnimation && previous >= 0 && index >= 0 && index != previous && SettingsPage.Visibility == Visibility.Visible)
+            RiseInSettingsContent();
+    }
+
+    /// <summary>
+    /// The Windows 11 Settings page transition: content rises from below into place while the
+    /// title and tabs stay put.
+    /// </summary>
+    private void RiseInSettingsContent()
+    {
+        ElementCompositionPreview.SetIsTranslationEnabled(SettingsContentHost, true);
+        var visual = ElementCompositionPreview.GetElementVisual(SettingsContentHost);
+        visual.StopAnimation(nameof(visual.Opacity));
+        visual.StopAnimation("Translation");
+        if (!_uiSettings.AnimationsEnabled)
+        {
+            visual.Opacity = 1;
+            visual.Properties.InsertVector3("Translation", Vector3.Zero);
+            return;
+        }
+
+        var compositor = visual.Compositor;
+        var easing = compositor.CreateCubicBezierEasingFunction(new Vector2(0.1f, 0.9f), new Vector2(0.2f, 1f));
+        // A long travel with a hard deceleration: most of the distance is covered in the first
+        // few frames, then the content settles gently.
+        var rise = compositor.CreateVector3KeyFrameAnimation();
+        rise.InsertKeyFrame(0, new Vector3(0, 140, 0));
+        rise.InsertKeyFrame(1, Vector3.Zero, easing);
+        rise.Duration = TimeSpan.FromMilliseconds(500);
+        // Quick fade so the content is solid well before it lands.
+        var fade = compositor.CreateScalarKeyFrameAnimation();
+        fade.InsertKeyFrame(0, 0);
+        fade.InsertKeyFrame(1, 1, compositor.CreateLinearEasingFunction());
+        fade.Duration = TimeSpan.FromMilliseconds(150);
+        visual.StartAnimation("Translation", rise);
+        visual.StartAnimation(nameof(visual.Opacity), fade);
     }
 
     private void ResetSettingsToGeneral()
     {
         var generalItem = SettingsNav.MenuItems.OfType<NavigationViewItem>()
             .First(item => string.Equals(item.Tag as string, "general", StringComparison.Ordinal));
-        SettingsNav.SelectedItem = generalItem;
+        _suppressSettingsTabAnimation = true;
+        try { SettingsNav.SelectedItem = generalItem; }
+        finally { _suppressSettingsTabAnimation = false; }
         GeneralSettingsPage.Visibility = Visibility.Visible;
         LocationSettingsPage.Visibility = Visibility.Collapsed;
         SourcesSettingsPage.Visibility = Visibility.Collapsed;
         AboutSettingsPage.Visibility = Visibility.Collapsed;
     }
 
-    private void AddAboutSettings(StackPanel settingsPanel)
+    private void AddAboutSettings(StackPanel settingsPanel, Brush iconBrush)
     {
         var assembly = Assembly.GetExecutingAssembly();
         var version = assembly.GetName().Version;
@@ -1437,51 +1610,26 @@ public sealed partial class MainWindow : Window
         var released = DateTime.TryParse(releaseDateText, out var releaseDate)
             ? releaseDate.ToString("MMMM d, yyyy")
             : "Unknown";
-        var card = new Border
-        {
-            Style = (Style)Application.Current.Resources["WeatherCardStyle"],
-            Padding = new Thickness(18),
-            Child = new Grid
-            {
-                ColumnSpacing = 16,
-                ColumnDefinitions =
-                {
-                    new ColumnDefinition { Width = new GridLength(56) },
-                    new ColumnDefinition()
-                },
-                Children =
-                {
-                    CreateAboutIcon(),
-                    CreateAboutText(displayVersion, released)
-                }
-            }
-        };
-        settingsPanel.Children.Add(card);
 
-        settingsPanel.Children.Add(CreateSupportCard());
+        var supportButton = new Button { Content = "Support on Ko-fi" };
+        supportButton.Click += async (_, _) =>
+            await Windows.System.Launcher.LaunchUriAsync(new Uri("https://ko-fi.com/wrenchware"));
+        var rows = new List<UIElement>
+        {
+            SettingsRow("\uE706", iconBrush, $"Version {displayVersion}", $"Released {released} · A free, ad-free Windows weather dashboard."),
+            SettingsRow("\uEB51", iconBrush, "Support Forecast Center", "Forecast Center is free and ad-free. If it is useful to you, an optional donation can help support continued development. Donations do not unlock features or benefits.", supportButton)
+        };
 
         // Store installs are updated by the Microsoft Store, which does not allow
         // apps to direct users to download updates elsewhere.
-        if (AppIdentity.IsPackaged) return;
-
-        _updateStatusText = new TextBlock
+        if (!AppIdentity.IsPackaged)
         {
-            Text = _lastUpdateStatus ?? "Updates are checked automatically once a day.",
-            TextWrapping = TextWrapping.Wrap,
-            Opacity = 0.72
-        };
-        _checkForUpdatesButton = new Button { Content = "Check for updates", HorizontalAlignment = HorizontalAlignment.Left };
-        _checkForUpdatesButton.Click += async (_, _) => await CheckForUpdatesAsync(force: true, showCurrentStatus: true);
-        var updatePanel = new StackPanel { Spacing = 9 };
-        updatePanel.Children.Add(new TextBlock { Text = "APP UPDATES", FontSize = 10, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, CharacterSpacing = 60 });
-        updatePanel.Children.Add(_updateStatusText);
-        updatePanel.Children.Add(_checkForUpdatesButton);
-        settingsPanel.Children.Add(new Border
-        {
-            Style = (Style)Application.Current.Resources["WeatherCardStyle"],
-            Padding = new Thickness(18),
-            Child = updatePanel
-        });
+            _updateStatusText = new TextBlock { Text = _lastUpdateStatus ?? "Updates are checked automatically once a day." };
+            _checkForUpdatesButton = new Button { Content = "Check for updates" };
+            _checkForUpdatesButton.Click += async (_, _) => await CheckForUpdatesAsync(force: true, showCurrentStatus: true);
+            rows.Add(SettingsRow("\uE895", iconBrush, "App updates", _updateStatusText, _checkForUpdatesButton));
+        }
+        AddSettingsSection(settingsPanel, "Forecast Center", [.. rows]);
     }
 
     private async Task CheckForUpdatesAsync(bool force, bool showCurrentStatus)
@@ -1541,104 +1689,20 @@ public sealed partial class MainWindow : Window
         finally { _updateDialogOpen = false; }
     }
 
-    private static FrameworkElement CreateAboutIcon()
+    private void AddDownloadedDataSettings(StackPanel settingsPanel, Brush iconBrush)
     {
-        var icon = new FontIcon { Glyph = "\uE706", FontSize = 24, Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 242, 184, 75)), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
-        return new Grid { Width = 52, Height = 52, Background = new SolidColorBrush(Windows.UI.Color.FromArgb(24, 242, 184, 75)), CornerRadius = new CornerRadius(12), Children = { icon } };
-    }
-
-    private static FrameworkElement CreateAboutText(string version, string released)
-    {
-        var panel = new StackPanel { Spacing = 5 };
-        Grid.SetColumn(panel, 1);
-        panel.Children.Add(new TextBlock { Text = "Forecast Center", FontSize = 18, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
-        panel.Children.Add(new TextBlock { Text = $"Version {version} · Released {released}", Opacity = 0.72 });
-        panel.Children.Add(new TextBlock { Text = "A free, ad-free Windows weather dashboard.", TextWrapping = TextWrapping.Wrap, Opacity = 0.72 });
-        return panel;
-    }
-
-    private static FrameworkElement CreateSupportCard()
-    {
-        var icon = new TextBlock
-        {
-            Text = "☕",
-            FontFamily = new FontFamily("Segoe UI Emoji"),
-            FontSize = 25,
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center
-        };
-        var iconContainer = new Grid
-        {
-            Width = 44,
-            Height = 44,
-            CornerRadius = new CornerRadius(12),
-            Background = new SolidColorBrush(Windows.UI.Color.FromArgb(28, 242, 184, 75)),
-            Children = { icon }
-        };
-
-        var supportButton = new Button
-        {
-            Content = "Support on Ko-fi",
-            HorizontalAlignment = HorizontalAlignment.Left,
-            Margin = new Thickness(0, 4, 0, 0)
-        };
-        supportButton.Click += async (_, _) =>
-            await Windows.System.Launcher.LaunchUriAsync(new Uri("https://ko-fi.com/wrenchware"));
-
-        var content = new StackPanel { Spacing = 6 };
-        Grid.SetColumn(content, 1);
-        content.Children.Add(new TextBlock
-        {
-            Text = "Support Forecast Center",
-            FontSize = 16,
-            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold
-        });
-        content.Children.Add(new TextBlock
-        {
-            Text = "Forecast Center is free and ad-free. If it is useful to you, an optional donation can help support continued development. Donations do not unlock features or benefits.",
-            TextWrapping = TextWrapping.Wrap,
-            Opacity = 0.72
-        });
-        content.Children.Add(supportButton);
-
-        return new Border
-        {
-            Style = (Style)Application.Current.Resources["WeatherCardStyle"],
-            Padding = new Thickness(18),
-            Child = new Grid
-            {
-                ColumnSpacing = 16,
-                ColumnDefinitions =
-                {
-                    new ColumnDefinition { Width = new GridLength(44) },
-                    new ColumnDefinition()
-                },
-                Children = { iconContainer, content }
-            }
-        };
-    }
-
-    private void AddDownloadedDataSettings(StackPanel settingsPanel)
-    {
-        _downloadedDataSettingsSection = DownloadedDataCard;
-        _weatherCacheStatusText = new TextBlock { TextWrapping = TextWrapping.Wrap, Opacity = 0.72 };
-        _radarCacheStatusText = new TextBlock { TextWrapping = TextWrapping.Wrap, Opacity = 0.72 };
-        _tideCacheStatusText = new TextBlock { TextWrapping = TextWrapping.Wrap, Opacity = 0.72 };
-        var refreshTides = new Button { Content = "Refresh NOAA station list", HorizontalAlignment = HorizontalAlignment.Left };
+        _weatherCacheStatusText = new TextBlock();
+        _radarCacheStatusText = new TextBlock();
+        _tideCacheStatusText = new TextBlock();
+        var refreshTides = new Button { Content = "Refresh station list" };
         refreshTides.Click += RefreshTideCatalog_Click;
-        settingsPanel.Children.Add(CreateDownloadedDataRow("WEATHER & ENVIRONMENT", _weatherCacheStatusText));
-        settingsPanel.Children.Add(CreateDownloadedDataRow("RADAR CITY TEMPERATURES", _radarCacheStatusText));
-        settingsPanel.Children.Add(CreateDownloadedDataRow("NOAA TIDE STATIONS", _tideCacheStatusText, refreshTides));
+        var header = new TextBlock { Text = "Downloaded data", Style = SettingsStyle("SettingsSectionHeaderStyle") };
+        _downloadedDataSettingsSection = header;
+        settingsPanel.Children.Add(header);
+        settingsPanel.Children.Add(SettingsRow("\uEBD3", iconBrush, "Weather & environment", _weatherCacheStatusText));
+        settingsPanel.Children.Add(SettingsRow("\uE707", iconBrush, "Radar city temperatures", _radarCacheStatusText));
+        settingsPanel.Children.Add(SettingsRow("ms-appx:///Assets/metrics/tides.svg", iconBrush, "NOAA tide stations", _tideCacheStatusText, refreshTides));
         RefreshDownloadedDataStatus();
-    }
-
-    private static FrameworkElement CreateDownloadedDataRow(string title, TextBlock status, Button? action = null)
-    {
-        var panel = new StackPanel { Spacing = 4 };
-        panel.Children.Add(new TextBlock { Text = title, FontSize = 10, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, CharacterSpacing = 60 });
-        panel.Children.Add(status);
-        if (action is not null) panel.Children.Add(action);
-        return panel;
     }
 
     private void RefreshDownloadedDataStatus()
@@ -1688,12 +1752,13 @@ public sealed partial class MainWindow : Window
     private void OpenDownloadedDataSettings_Click(object sender, RoutedEventArgs e)
     {
         ShowSettingsPage("sources");
-        DispatcherQueue.TryEnqueue(() => _downloadedDataSettingsSection?.StartBringIntoView());
+        // Put the section heading at the top so its rows are visible below it.
+        DispatcherQueue.TryEnqueue(() => _downloadedDataSettingsSection?.StartBringIntoView(new BringIntoViewOptions { VerticalAlignmentRatio = 0, AnimationDesired = true }));
     }
 
-    private async void MinimizeToTrayCheckBox_Changed(object sender, RoutedEventArgs e)
+    private async void MinimizeToTrayToggle_Toggled(object sender, RoutedEventArgs e)
     {
-        if (!_initialized || _minimizeToTrayCheckBox?.IsChecked is not bool enabled) return;
+        if (!_initialized || _minimizeToTrayToggle is not { IsOn: var enabled }) return;
         await ViewModel.SetMinimizeToTrayAsync(enabled);
     }
 
@@ -1710,13 +1775,13 @@ public sealed partial class MainWindow : Window
         _weatherRefreshTimer.Interval = TimeSpan.FromMinutes(ViewModel.RefreshMinutes);
     }
 
-    private async void StartWithWindowsCheckBox_Changed(object sender, RoutedEventArgs e)
+    private async void StartWithWindowsToggle_Toggled(object sender, RoutedEventArgs e)
     {
-        if (!_initialized || _startWithWindowsCheckBox?.IsChecked is not bool enabled) return;
+        if (!_initialized || _startWithWindowsToggle is not { IsOn: var enabled }) return;
         var applied = AppIdentity.IsPackaged ? await SetPackagedStartupAsync(enabled) : SetStartupRegistration(enabled);
         if (!applied)
         {
-            _startWithWindowsCheckBox.IsChecked = false;
+            _startWithWindowsToggle.IsOn = false;
             ViewModel.Status = AppIdentity.IsPackaged
                 ? "Windows has startup turned off for Forecast Center. Turn it on in Settings > Apps > Startup."
                 : "Forecast Center could not update the Windows startup setting.";
@@ -1746,18 +1811,16 @@ public sealed partial class MainWindow : Window
     }
 
     /// <summary>Reflects changes the user made in Windows Settings > Apps > Startup.</summary>
-    private async Task SyncPackagedStartupCheckBoxAsync()
+    private async Task SyncPackagedStartupToggleAsync()
     {
-        if (!AppIdentity.IsPackaged || _startWithWindowsCheckBox is null) return;
+        if (!AppIdentity.IsPackaged || _startWithWindowsToggle is null) return;
         try
         {
             var task = await Windows.ApplicationModel.StartupTask.GetAsync(AppIdentity.StartupTaskId);
             var enabled = task.State is Windows.ApplicationModel.StartupTaskState.Enabled or Windows.ApplicationModel.StartupTaskState.EnabledByPolicy;
-            _startWithWindowsCheckBox.Checked -= StartWithWindowsCheckBox_Changed;
-            _startWithWindowsCheckBox.Unchecked -= StartWithWindowsCheckBox_Changed;
-            _startWithWindowsCheckBox.IsChecked = enabled;
-            _startWithWindowsCheckBox.Checked += StartWithWindowsCheckBox_Changed;
-            _startWithWindowsCheckBox.Unchecked += StartWithWindowsCheckBox_Changed;
+            _startWithWindowsToggle.Toggled -= StartWithWindowsToggle_Toggled;
+            _startWithWindowsToggle.IsOn = enabled;
+            _startWithWindowsToggle.Toggled += StartWithWindowsToggle_Toggled;
         }
         catch { }
     }
@@ -1775,9 +1838,9 @@ public sealed partial class MainWindow : Window
         catch { return false; }
     }
 
-    private async void GlobalTideStationCheckBox_Changed(object sender, RoutedEventArgs e)
+    private async void GlobalTideStationToggle_Toggled(object sender, RoutedEventArgs e)
     {
-        if (!_initialized || _updatingTideStationSelection || _globalTideStationCheckBox?.IsChecked is not bool enabled) return;
+        if (!_initialized || _updatingTideStationSelection || _globalTideStationToggle is not { IsOn: var enabled }) return;
         _updatingTideStationSelection = true;
         try
         {
@@ -1808,7 +1871,7 @@ public sealed partial class MainWindow : Window
         if (index < 0) index = 0;
         DashboardTideStationPicker.SelectedIndex = index;
         if (_tideStationPicker is not null) _tideStationPicker.SelectedIndex = index;
-        if (_globalTideStationCheckBox is not null) _globalTideStationCheckBox.IsChecked = ViewModel.UseGlobalTideStation;
+        if (_globalTideStationToggle is not null) _globalTideStationToggle.IsOn = ViewModel.UseGlobalTideStation;
     }
 
     private async void TideStationPicker_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -1824,10 +1887,9 @@ public sealed partial class MainWindow : Window
         finally { _updatingTideStationSelection = false; }
     }
 
-    private async void ThemeRadio_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private async void ThemePicker_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (!_initialized || _themeRadio is null || _themeRadio.SelectedIndex < 0) return;
-        var theme = _themeRadio.SelectedIndex switch { 1 => "Light", 2 => "Dark", _ => "System" };
+        if (!_initialized || _themePicker?.SelectedItem is not ComboBoxItem { Tag: string theme }) return;
         ApplyTheme(theme);
         await ViewModel.SetThemeAsync(theme);
     }

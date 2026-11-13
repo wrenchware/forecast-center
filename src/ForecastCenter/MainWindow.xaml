@@ -4,7 +4,8 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:ForecastCenter"
     xmlns:vm="using:ForecastCenter.ViewModels"
-    xmlns:models="using:ForecastCenter.Models">
+    xmlns:models="using:ForecastCenter.Models"
+    xmlns:animatedvisuals="using:Microsoft.UI.Xaml.Controls.AnimatedVisuals">
     <Grid x:Name="RootGrid">
         <Grid.RowDefinitions><RowDefinition x:Name="TitleBarRow" Height="48"/><RowDefinition/></Grid.RowDefinitions>
         <Grid Grid.RowSpan="2" Background="{ThemeResource DashboardBaseColor}"/>
@@ -17,6 +18,7 @@
             </Grid.Background>
         </Grid>
         <Grid x:Name="TitleBarDragRegion" Grid.Row="0" Height="48" Padding="12,0,150,0" Background="Transparent"/>
+        <Button x:Name="TitleBarBackButton" Grid.Row="0" Visibility="Collapsed" Margin="8,0,0,0" Width="40" Height="32" Padding="0" VerticalAlignment="Center" CornerRadius="6" Background="Transparent" BorderThickness="0" Click="TitleBarBack_Click" ToolTipService.ToolTip="Back to dashboard" AutomationProperties.Name="Back"><AnimatedIcon Width="16" Height="16"><AnimatedIcon.Source><animatedvisuals:AnimatedBackVisualSource/></AnimatedIcon.Source><AnimatedIcon.FallbackIconSource><SymbolIconSource Symbol="Back"/></AnimatedIcon.FallbackIconSource></AnimatedIcon></Button>
         <Grid Grid.Row="1">
             <Grid>
                 <ScrollViewer x:Name="WeatherPage" HorizontalScrollMode="Disabled" VerticalScrollMode="Enabled" VerticalScrollBarVisibility="Auto">
@@ -31,7 +33,7 @@
                                 <StackPanel Orientation="Horizontal" Spacing="8"><TextBlock Text="{x:Bind ViewModel.Updated, Mode=OneWay}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center"/><ProgressRing Width="12" Height="12" MinWidth="12" MinHeight="12" VerticalAlignment="Center" IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}" ToolTipService.ToolTip="Updating"/></StackPanel>
                             </StackPanel>
                             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                <Button Width="40" Height="40" Padding="0" Background="Transparent" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" CornerRadius="9" Click="OpenSettings_Click" ToolTipService.ToolTip="Settings"><FontIcon FontFamily="Segoe Fluent Icons" Glyph="&#xE713;" FontSize="16"/></Button>
+                                <Button Width="40" Height="40" Padding="0" Background="Transparent" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" CornerRadius="9" Click="OpenSettings_Click" ToolTipService.ToolTip="Settings" AutomationProperties.Name="Settings"><FontIcon FontFamily="Segoe Fluent Icons" Glyph="&#xE713;" FontSize="16"/></Button>
                                 <ComboBox x:Name="SavedLocationPicker" Width="260" Height="40" PlaceholderText="Choose location" SelectionChanged="SavedLocationPicker_SelectionChanged"/>
                                 <Button x:Name="DefaultLocationButton" Height="40" Padding="14,0" Click="SetDefaultLocation_Click" ToolTipService.ToolTip="Use this location when Forecast Center starts"><TextBlock Text="Make default"/></Button>
                             </StackPanel>
@@ -205,20 +207,32 @@
                 </Grid>
                 <Grid x:Name="RadarPage" Visibility="Collapsed" Padding="24">
                     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                    <Grid Margin="0,0,0,12"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="Weather radar" Style="{StaticResource TitleTextBlockStyle}"/><TextBlock Text="Recent observations and the next six hours on one timeline. Use +/− or Ctrl+wheel to zoom." Foreground="{ThemeResource TextFillColorSecondaryBrush}"/></StackPanel><Button Grid.Column="1" Click="BackToWeather_Click" Padding="13,7" CornerRadius="8" ToolTipService.ToolTip="Return to weather dashboard"><StackPanel Orientation="Horizontal" Spacing="7"><FontIcon Glyph="&#xE80F;" FontSize="14"/><TextBlock Text="Dashboard"/></StackPanel></Button></Grid>
+                    <Grid Margin="0,0,0,12"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="Weather radar" Style="{StaticResource TitleTextBlockStyle}"/><TextBlock Text="Recent observations and the next six hours on one timeline. Use +/− or Ctrl+wheel to zoom." Foreground="{ThemeResource TextFillColorSecondaryBrush}"/></StackPanel></Grid>
                     <Border Grid.Row="1" CornerRadius="12" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"><WebView2 x:Name="RadarWebView"/></Border>
                     <StackPanel Grid.Row="2" Margin="0,5,0,0" Orientation="Horizontal" Spacing="2" HorizontalAlignment="Right" Opacity="0.65"><TextBlock Text="Radar:" FontSize="11" VerticalAlignment="Center"/><HyperlinkButton Content="NOAA/NWS MRMS" NavigateUri="https://www.weather.gov/gis/IDP-GISRestMetadata" FontSize="11" Padding="2,0"/><TextBlock Text="· Map:" FontSize="11" VerticalAlignment="Center"/><HyperlinkButton Content="© OpenStreetMap contributors" NavigateUri="https://www.openstreetmap.org/copyright" FontSize="11" Padding="2,0"/><TextBlock Text="/ OpenMapTiles /" FontSize="11" VerticalAlignment="Center"/><HyperlinkButton Content="OpenFreeMap" NavigateUri="https://openfreemap.org/" FontSize="11" Padding="2,0"/><TextBlock Text="· Cities:" FontSize="11" VerticalAlignment="Center"/><HyperlinkButton Content="GeoNames" NavigateUri="https://www.geonames.org/" FontSize="11" Padding="2,0"/></StackPanel>
                 </Grid>
-                <ScrollViewer x:Name="AlertsPage" Visibility="Collapsed" HorizontalScrollMode="Disabled"><StackPanel MaxWidth="920" HorizontalAlignment="Left" Padding="28" Spacing="12"><Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="Active alerts" Style="{StaticResource TitleTextBlockStyle}"/><TextBlock Text="National Weather Service alerts for the selected U.S. location." Foreground="{ThemeResource TextFillColorSecondaryBrush}"/></StackPanel><Button Grid.Column="1" Click="BackToWeather_Click" Padding="13,7" CornerRadius="8" ToolTipService.ToolTip="Return to weather dashboard"><StackPanel Orientation="Horizontal" Spacing="7"><FontIcon Glyph="&#xE80F;" FontSize="14"/><TextBlock Text="Dashboard"/></StackPanel></Button></Grid><ItemsRepeater ItemsSource="{x:Bind ViewModel.Alerts}"><ItemsRepeater.Layout><StackLayout Spacing="10"/></ItemsRepeater.Layout><ItemsRepeater.ItemTemplate><DataTemplate x:DataType="models:WeatherAlert"><Border Style="{StaticResource WeatherCardStyle}"><StackPanel Spacing="7"><TextBlock Text="{x:Bind Event}" Style="{StaticResource SubtitleTextBlockStyle}"/><TextBlock Text="{x:Bind Severity}" Foreground="{ThemeResource SystemFillColorCriticalBrush}"/><TextBlock Text="{x:Bind Headline}" TextWrapping="Wrap"/><TextBlock Text="{x:Bind Description}" TextWrapping="Wrap" MaxLines="8"/><TextBlock Text="{x:Bind Instruction}" TextWrapping="Wrap" FontWeight="SemiBold"/></StackPanel></Border></DataTemplate></ItemsRepeater.ItemTemplate></ItemsRepeater></StackPanel></ScrollViewer>
-                <Grid x:Name="SettingsPage" Visibility="Collapsed" Padding="20,12,20,20">
+                <ScrollViewer x:Name="AlertsPage" Visibility="Collapsed" HorizontalScrollMode="Disabled"><StackPanel MaxWidth="920" HorizontalAlignment="Left" Padding="28" Spacing="12"><Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="Active alerts" Style="{StaticResource TitleTextBlockStyle}"/><TextBlock Text="National Weather Service alerts for the selected U.S. location." Foreground="{ThemeResource TextFillColorSecondaryBrush}"/></StackPanel></Grid><ItemsRepeater ItemsSource="{x:Bind ViewModel.Alerts}"><ItemsRepeater.Layout><StackLayout Spacing="10"/></ItemsRepeater.Layout><ItemsRepeater.ItemTemplate><DataTemplate x:DataType="models:WeatherAlert"><Border Style="{StaticResource WeatherCardStyle}"><StackPanel Spacing="7"><TextBlock Text="{x:Bind Event}" Style="{StaticResource SubtitleTextBlockStyle}"/><TextBlock Text="{x:Bind Severity}" Foreground="{ThemeResource SystemFillColorCriticalBrush}"/><TextBlock Text="{x:Bind Headline}" TextWrapping="Wrap"/><TextBlock Text="{x:Bind Description}" TextWrapping="Wrap" MaxLines="8"/><TextBlock Text="{x:Bind Instruction}" TextWrapping="Wrap" FontWeight="SemiBold"/></StackPanel></Border></DataTemplate></ItemsRepeater.ItemTemplate></ItemsRepeater></StackPanel></ScrollViewer>
+                <Grid x:Name="SettingsPage" Visibility="Collapsed" Padding="24,0,24,0">
+                    <Grid.Resources>
+                        <Style x:Key="SettingsRowStyle" TargetType="Border">
+                            <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}"/>
+                            <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}"/>
+                            <Setter Property="BorderThickness" Value="1"/>
+                            <Setter Property="CornerRadius" Value="6"/>
+                            <Setter Property="Padding" Value="16,12"/>
+                            <Setter Property="MinHeight" Value="66"/>
+                        </Style>
+                        <Style x:Key="SettingsSectionHeaderStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyStrongTextBlockStyle}">
+                            <Setter Property="Margin" Value="2,22,0,8"/>
+                        </Style>
+                        <Style x:Key="SettingsRowDescriptionStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextBlockStyle}">
+                            <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}"/>
+                            <Setter Property="TextWrapping" Value="Wrap"/>
+                        </Style>
+                    </Grid.Resources>
                     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/></Grid.RowDefinitions>
-                    <Grid Margin="8,0,0,10">
-                        <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                        <TextBlock Text="Settings" Style="{StaticResource TitleTextBlockStyle}" VerticalAlignment="Center"/>
-                        <Button Grid.Column="1" Click="SettingsDashboard_Click" Padding="13,7" CornerRadius="8" ToolTipService.ToolTip="Return to weather dashboard"><StackPanel Orientation="Horizontal" Spacing="7"><FontIcon Glyph="&#xE80F;" FontSize="14"/><TextBlock Text="Dashboard"/></StackPanel></Button>
-                    </Grid>
-                    <Border Grid.Row="1" CornerRadius="12" Background="{ThemeResource LayerFillColorDefaultBrush}">
-                    <NavigationView x:Name="SettingsNav" PaneDisplayMode="Top" IsSettingsVisible="False" IsBackButtonVisible="Collapsed" IsPaneToggleButtonVisible="False" Background="Transparent" SelectionChanged="SettingsNav_SelectionChanged">
+                    <TextBlock Text="Settings" Style="{StaticResource TitleTextBlockStyle}" Margin="14,0,0,6"/>
+                    <NavigationView x:Name="SettingsNav" Grid.Row="1" PaneDisplayMode="Top" IsSettingsVisible="False" IsBackButtonVisible="Collapsed" IsPaneToggleButtonVisible="False" Background="Transparent" SelectionChanged="SettingsNav_SelectionChanged">
                         <NavigationView.Resources><SolidColorBrush x:Key="NavigationViewContentBackground" Color="Transparent"/><Thickness x:Key="TopNavigationViewContentGridBorderThickness">0</Thickness><Thickness x:Key="TopNavigationViewItemContentOnlyContentPresenterMargin">12,-1,12,1</Thickness></NavigationView.Resources>
                         <NavigationView.MenuItems>
                             <NavigationViewItem Content="General" Tag="general" IsSelected="True" CornerRadius="8"/>
@@ -226,60 +240,44 @@
                             <NavigationViewItem Content="Sources &amp; data" Tag="sources" CornerRadius="8"/>
                             <NavigationViewItem Content="About" Tag="about" CornerRadius="8"/>
                         </NavigationView.MenuItems>
-                        <Grid>
+                        <Grid x:Name="SettingsContentHost">
                             <ScrollViewer x:Name="GeneralSettingsPage" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                                <StackPanel x:Name="GeneralSettingsPanel" MaxWidth="680" HorizontalAlignment="Left" Padding="20,20,20,32" Spacing="12">
-                                    <Border Style="{StaticResource WeatherCardStyle}" Padding="18">
-                                        <Grid ColumnSpacing="16">
-                                            <Grid.ColumnDefinitions><ColumnDefinition Width="40"/><ColumnDefinition/></Grid.ColumnDefinitions>
-                                            <Grid Width="40" Height="40" VerticalAlignment="Top"><Ellipse Fill="#182A8EDB"/><FontIcon Glyph="&#xE771;" FontSize="18" Foreground="#4AADE8" HorizontalAlignment="Center" VerticalAlignment="Center"/></Grid>
-                                            <StackPanel Grid.Column="1" Spacing="10">
-                                                <StackPanel Spacing="2"><TextBlock Text="Appearance" FontSize="16" FontWeight="SemiBold"/><TextBlock Text="Choose how Forecast Center follows Windows colors." Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap"/></StackPanel>
-                                                <StackPanel x:Name="ThemeSettingsHost"/>
-                                            </StackPanel>
-                                        </Grid>
-                                    </Border>
-                                    <Border Style="{StaticResource WeatherCardStyle}" Padding="18">
-                                        <Grid ColumnSpacing="16">
-                                            <Grid.ColumnDefinitions><ColumnDefinition Width="40"/><ColumnDefinition/></Grid.ColumnDefinitions>
-                                            <Grid Width="40" Height="40" VerticalAlignment="Top"><Ellipse Fill="#18F2B84B"/><FontIcon Glyph="&#xE9D9;" FontSize="18" Foreground="#F2B84B" HorizontalAlignment="Center" VerticalAlignment="Center"/></Grid>
-                                            <StackPanel Grid.Column="1" Spacing="10">
-                                                <StackPanel Spacing="2"><TextBlock Text="Temperature units" FontSize="16" FontWeight="SemiBold"/><TextBlock Text="Use Fahrenheit or Celsius throughout forecasts and maps." Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap"/></StackPanel>
-                                                <RadioButtons x:Name="UnitsRadio" MaxColumns="2" SelectionChanged="UnitsRadio_SelectionChanged"><x:String>Fahrenheit</x:String><x:String>Celsius</x:String></RadioButtons>
-                                                <StackPanel x:Name="MeasurementSettingsHost" Spacing="8"/>
-                                            </StackPanel>
-                                        </Grid>
-                                    </Border>
-                                    <Border Style="{StaticResource WeatherCardStyle}" Padding="18">
-                                        <Grid ColumnSpacing="16">
-                                            <Grid.ColumnDefinitions><ColumnDefinition Width="40"/><ColumnDefinition/></Grid.ColumnDefinitions>
-                                            <Grid Width="40" Height="40" VerticalAlignment="Top"><Ellipse Fill="#189B8BEA"/><FontIcon Glyph="&#xE7F4;" FontSize="18" Foreground="#A99AF0" HorizontalAlignment="Center" VerticalAlignment="Center"/></Grid>
-                                            <StackPanel Grid.Column="1" Spacing="10">
-                                                <StackPanel Spacing="2"><TextBlock Text="App behavior" FontSize="16" FontWeight="SemiBold"/><TextBlock Text="Choose update timing and how Forecast Center works with Windows." Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap"/></StackPanel>
-                                                <StackPanel x:Name="AppBehaviorSettingsHost" Spacing="10"/>
-                                            </StackPanel>
-                                        </Grid>
-                                    </Border>
-                                </StackPanel>
+                                <Grid Padding="14,0,14,36"><Grid.ColumnDefinitions><ColumnDefinition MaxWidth="1000"/></Grid.ColumnDefinitions><StackPanel x:Name="GeneralSettingsPanel" Spacing="4"/></Grid>
                             </ScrollViewer>
                             <ScrollViewer x:Name="LocationSettingsPage" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                                <StackPanel x:Name="LocationSettingsPanel" MaxWidth="680" HorizontalAlignment="Left" Padding="20,20,20,32" Spacing="12">
-                                    <Border Style="{StaticResource WeatherCardStyle}" Padding="18"><Grid ColumnSpacing="16"><Grid.ColumnDefinitions><ColumnDefinition Width="40"/><ColumnDefinition/></Grid.ColumnDefinitions><Grid Width="40" Height="40" VerticalAlignment="Top"><Ellipse Fill="#189B8BEA"/><FontIcon Glyph="&#xE81D;" FontSize="18" Foreground="#A99AF0" HorizontalAlignment="Center" VerticalAlignment="Center"/></Grid><StackPanel Grid.Column="1" Spacing="3"><TextBlock Text="Automatic location" FontSize="16" FontWeight="SemiBold"/><TextBlock Text="Choose Automatic location from the dashboard location menu to use Windows location services. Choosing a saved location returns to manual mode." TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/></StackPanel></Grid></Border>
-                                    <Border Style="{StaticResource WeatherCardStyle}" Padding="18"><Grid ColumnSpacing="16"><Grid.ColumnDefinitions><ColumnDefinition Width="40"/><ColumnDefinition/></Grid.ColumnDefinitions><Grid Width="40" Height="40" VerticalAlignment="Top"><Ellipse Fill="#182A8EDB"/><FontIcon Glyph="&#xE721;" FontSize="18" Foreground="#4AADE8" HorizontalAlignment="Center" VerticalAlignment="Center"/></Grid><StackPanel Grid.Column="1" Spacing="10"><StackPanel Spacing="2"><TextBlock Text="Add a location" FontSize="16" FontWeight="SemiBold"/><TextBlock Text="Search for a city or ZIP code. Selecting a result saves it and makes it active." TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/></StackPanel><Grid ColumnSpacing="8"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBox x:Name="SearchBox" PlaceholderText="City or ZIP code" Text="{x:Bind ViewModel.SearchText, Mode=TwoWay}" KeyDown="SearchBox_KeyDown"/><Button Grid.Column="1" Content="Search" Click="Search_Click"/></Grid><ListView ItemsSource="{x:Bind ViewModel.SearchResults}" SelectionChanged="SearchResults_SelectionChanged" DisplayMemberPath="DisplayName" MaxHeight="260"/></StackPanel></Grid></Border>
-                                    <Border Style="{StaticResource WeatherCardStyle}" Padding="18"><Grid ColumnSpacing="16"><Grid.ColumnDefinitions><ColumnDefinition Width="40"/><ColumnDefinition/></Grid.ColumnDefinitions><Grid Width="40" Height="40" VerticalAlignment="Top"><Ellipse Fill="#18F2B84B"/><FontIcon Glyph="&#xE734;" FontSize="18" Foreground="#F2B84B" HorizontalAlignment="Center" VerticalAlignment="Center"/></Grid><StackPanel Grid.Column="1" Spacing="10"><StackPanel Spacing="2"><TextBlock Text="Saved locations" FontSize="16" FontWeight="SemiBold"/><TextBlock Text="Locations available from the dashboard switcher." Foreground="{ThemeResource TextFillColorSecondaryBrush}"/></StackPanel><ItemsRepeater ItemsSource="{x:Bind ViewModel.SavedLocations}"><ItemsRepeater.Layout><StackLayout Spacing="4"/></ItemsRepeater.Layout><ItemsRepeater.ItemTemplate><DataTemplate x:DataType="models:LocationResult"><Border Background="{ThemeResource SubtleFillColorSecondaryBrush}" CornerRadius="8" Padding="10,6"><Grid ColumnSpacing="10"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Text="{x:Bind DisplayName}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/><Button Grid.Column="1" Tag="{x:Bind StorageKey}" Click="RemoveSavedLocation_Click" Background="Transparent" BorderThickness="0" ToolTipService.ToolTip="Remove saved location"><FontIcon Glyph="&#xE74D;" FontSize="13"/></Button></Grid></Border></DataTemplate></ItemsRepeater.ItemTemplate></ItemsRepeater></StackPanel></Grid></Border>
-                                    <Border Style="{StaticResource WeatherCardStyle}" Padding="18"><Grid ColumnSpacing="16"><Grid.ColumnDefinitions><ColumnDefinition Width="40"/><ColumnDefinition/></Grid.ColumnDefinitions><Grid Width="40" Height="40" VerticalAlignment="Top"><Ellipse Fill="#1862D7F2"/><FontIcon Glyph="&#xE7C4;" FontSize="18" Foreground="{ThemeResource TideAccentBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/></Grid><StackPanel Grid.Column="1" Spacing="10"><StackPanel Spacing="2"><TextBlock Text="Tide location" FontSize="16" FontWeight="SemiBold"/><TextBlock Text="Choose automatic nearby tides or override the station." Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap"/></StackPanel><StackPanel x:Name="TideSettingsHost" Spacing="6"/></StackPanel></Grid></Border>
+                                <Grid Padding="14,0,14,36"><Grid.ColumnDefinitions><ColumnDefinition MaxWidth="1000"/></Grid.ColumnDefinitions>
+                                <StackPanel x:Name="LocationSettingsPanel" Spacing="4">
+                                    <TextBlock Text="Saved locations" Style="{StaticResource SettingsSectionHeaderStyle}"/>
+                                    <ItemsRepeater ItemsSource="{x:Bind ViewModel.SavedLocations}"><ItemsRepeater.Layout><StackLayout Spacing="4"/></ItemsRepeater.Layout><ItemsRepeater.ItemTemplate><DataTemplate x:DataType="models:LocationResult">
+                                        <Border Style="{StaticResource SettingsRowStyle}" MinHeight="56" Padding="16,6,8,6"><Grid ColumnSpacing="16"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                            <FontIcon Glyph="&#xE707;" FontSize="18" Foreground="#F2B84B" VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Column="1" Text="{x:Bind DisplayName}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                                            <Button Grid.Column="2" Tag="{x:Bind StorageKey}" Click="RemoveSavedLocation_Click" Width="36" Height="36" Padding="0" CornerRadius="6" Background="Transparent" BorderThickness="0" ToolTipService.ToolTip="Remove saved location" AutomationProperties.Name="Remove saved location"><FontIcon Glyph="&#xE74D;" FontSize="14"/></Button>
+                                        </Grid></Border>
+                                    </DataTemplate></ItemsRepeater.ItemTemplate></ItemsRepeater>
+                                    <Border Style="{StaticResource SettingsRowStyle}"><Grid ColumnSpacing="16" RowSpacing="10"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                                        <FontIcon Glyph="&#xE721;" FontSize="18" Foreground="#4AADE8" VerticalAlignment="Center"/>
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center"><TextBlock Text="Add a location"/><TextBlock Text="Search for a city or ZIP code. Selecting a result saves it and makes it active." Style="{StaticResource SettingsRowDescriptionStyle}"/></StackPanel>
+                                        <Grid Grid.Row="1" Grid.Column="1" ColumnSpacing="8"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBox x:Name="SearchBox" PlaceholderText="City or ZIP code" Text="{x:Bind ViewModel.SearchText, Mode=TwoWay}" KeyDown="SearchBox_KeyDown"/><Button Grid.Column="1" Content="Search" Click="Search_Click"/></Grid>
+                                        <ListView Grid.Row="2" Grid.Column="1" ItemsSource="{x:Bind ViewModel.SearchResults}" SelectionChanged="SearchResults_SelectionChanged" DisplayMemberPath="DisplayName" MaxHeight="260"/>
+                                    </Grid></Border>
+                                    <Border Style="{StaticResource SettingsRowStyle}"><Grid ColumnSpacing="16"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition/></Grid.ColumnDefinitions>
+                                        <FontIcon Glyph="&#xE81D;" FontSize="18" Foreground="#A99AF0" VerticalAlignment="Center"/>
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center"><TextBlock Text="Automatic location"/><TextBlock Text="Choose Automatic location from the dashboard location menu to use Windows location services. Choosing a saved location returns to manual mode." Style="{StaticResource SettingsRowDescriptionStyle}"/></StackPanel>
+                                    </Grid></Border>
+                                    <TextBlock Text="Tides" Style="{StaticResource SettingsSectionHeaderStyle}"/>
+                                    <StackPanel x:Name="TideSettingsHost" Spacing="4"/>
                                 </StackPanel>
+                                </Grid>
                             </ScrollViewer>
                             <ScrollViewer x:Name="SourcesSettingsPage" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                                <StackPanel x:Name="SourcesSettingsPanel" MaxWidth="680" HorizontalAlignment="Left" Padding="20,20,20,32" Spacing="12">
-                                    <Border x:Name="DownloadedDataCard" Style="{StaticResource WeatherCardStyle}" Padding="18"><Grid ColumnSpacing="16"><Grid.ColumnDefinitions><ColumnDefinition Width="40"/><ColumnDefinition/></Grid.ColumnDefinitions><Grid Width="40" Height="40" VerticalAlignment="Top"><Ellipse Fill="#182A8EDB"/><FontIcon Glyph="&#xEBD3;" FontSize="18" Foreground="#4AADE8" HorizontalAlignment="Center" VerticalAlignment="Center"/></Grid><StackPanel Grid.Column="1" Spacing="10"><StackPanel Spacing="2"><TextBlock Text="Downloaded data" FontSize="16" FontWeight="SemiBold"/><TextBlock Text="Small local copies keep recent information available through temporary network failures." TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/></StackPanel><StackPanel x:Name="DownloadedDataSettingsHost" Spacing="12"/></StackPanel></Grid></Border>
-                                    <Border Style="{StaticResource WeatherCardStyle}" Padding="18"><Grid ColumnSpacing="16"><Grid.ColumnDefinitions><ColumnDefinition Width="40"/><ColumnDefinition/></Grid.ColumnDefinitions><Grid Width="40" Height="40" VerticalAlignment="Top"><Ellipse Fill="#1862D7F2"/><FontIcon Glyph="&#xE946;" FontSize="18" Foreground="{ThemeResource TideAccentBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/></Grid><StackPanel Grid.Column="1" Spacing="4"><TextBlock Text="Data attribution" FontSize="16" FontWeight="SemiBold"/><TextBlock Text="Forecast, environment, and geocoding: Open-Meteo (CC BY 4.0)&#x0a;Observed and future radar, U.S. alerts, and tides: NOAA/NWS&#x0a;Map: © OpenStreetMap contributors, OpenMapTiles, and OpenFreeMap&#x0a;Nearby city labels: GeoNames (CC BY 4.0)" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" LineHeight="21"/></StackPanel></Grid></Border>
-                                </StackPanel>
+                                <Grid Padding="14,0,14,36"><Grid.ColumnDefinitions><ColumnDefinition MaxWidth="1000"/></Grid.ColumnDefinitions><StackPanel x:Name="SourcesSettingsPanel" Spacing="4"/></Grid>
                             </ScrollViewer>
-                            <ScrollViewer x:Name="AboutSettingsPage" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><StackPanel x:Name="AboutSettingsPanel" MaxWidth="680" HorizontalAlignment="Left" Padding="20,20,20,32" Spacing="12"/></ScrollViewer>
+                            <ScrollViewer x:Name="AboutSettingsPage" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                <Grid Padding="14,0,14,36"><Grid.ColumnDefinitions><ColumnDefinition MaxWidth="1000"/></Grid.ColumnDefinitions><StackPanel x:Name="AboutSettingsPanel" Spacing="4"/></Grid>
+                            </ScrollViewer>
                         </Grid>
                     </NavigationView>
-                    </Border>
                 </Grid>
             </Grid>
         </Grid>
