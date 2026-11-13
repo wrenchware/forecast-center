@@ -2,6 +2,19 @@
 
 Notable user-facing changes to Forecast Center are recorded here. GitHub Releases contain matching downloadable installer notes.
 
+## 1.0.6 - 2026-11-13
+
+### Changed
+
+- Settings has a new Windows 11 style layout: one row per setting with its control on the right, grouped under section headings, using the full window width.
+- On/off settings are now switches, and theme and temperature units are dropdowns.
+- A back arrow in the title bar replaces the Dashboard buttons on Settings, Alerts and Radar. Alt+Left, Escape and the mouse back button also return to the dashboard.
+- Settings content rises into place when Settings opens and when you switch tabs, like the Windows Settings app.
+
+### Fixed
+
+- Screen readers now announce the Settings button and each setting's name.
+
 ## 1.0.5 - 2026-11-09
 
 ### Fixed
